@@ -16,29 +16,31 @@ func labelled(id uint64, label string) Node {
 	return Node{NodeID: id, Available: true, Attributes: attrs}
 }
 
-func TestSlug(t *testing.T) {
+func TestTopicSegmentKeepsTheLabelVerbatim(t *testing.T) {
 	cases := map[string]string{
-		"Kitchen Sensor":        "kitchen-sensor",
-		"  Salotto  ":           "salotto",
-		"Temp/Humidity #1":      "temp-humidity-1",
-		"già-caldo":             "gi-caldo",
-		"a+b#c/d":               "a-b-c-d",
-		"___":                   "",
-		"UPPER_case_Name":       "upper-case-name",
-		"v1.2:sensor":           "v1.2:sensor",
-		strings.Repeat("x", 80): strings.Repeat("x", 48),
+		"TEMP Ikea":              "TEMP Ikea",
+		"Kitchen Sensor":         "Kitchen Sensor",
+		"  Salotto  ":            "Salotto",
+		"già-caldo":              "già-caldo",
+		"UPPER_case_Name":        "UPPER_case_Name",
+		"v1.2:sensor":            "v1.2:sensor",
+		"___":                    "___",
+		"Temp/Humidity #1":       "Temp-Humidity -1",
+		"a+b#c/d":                "a-b-c-d",
+		"tab\there":              "tabhere",
+		strings.Repeat("x", 200): strings.Repeat("x", 128),
 	}
 	for in, want := range cases {
-		if got := slug(in); got != want {
-			t.Errorf("slug(%q) = %q, want %q", in, got, want)
+		if got := topicSegment(in); got != want {
+			t.Errorf("topicSegment(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
-func TestSlugNeverProducesWildcardsOrSeparators(t *testing.T) {
-	for _, in := range []string{"a/b", "a+b", "a#b", "a b", "a\tb", "café/+#"} {
-		if got := slug(in); strings.ContainsAny(got, "/+# \t") {
-			t.Fatalf("slug(%q) = %q contains an MQTT-unsafe character", in, got)
+func TestTopicSegmentNeverProducesWildcardsOrSeparators(t *testing.T) {
+	for _, in := range []string{"a/b", "a+b", "a#b", "café/+#", "a\x00b"} {
+		if got := topicSegment(in); strings.ContainsAny(got, "/+#\x00") {
+			t.Fatalf("topicSegment(%q) = %q contains an MQTT-unsafe character", in, got)
 		}
 	}
 }
@@ -50,8 +52,8 @@ func TestNameComesOnlyFromNodeLabel(t *testing.T) {
 		labelled(2, ""), // has ProductName, but no label
 	})
 
-	if name, ok := n.Name(1); !ok || name != "kitchen-sensor" {
-		t.Errorf("node 1 = %q ok=%v, want the NodeLabel slug", name, ok)
+	if name, ok := n.Name(1); !ok || name != "Kitchen Sensor" {
+		t.Errorf("node 1 = %q ok=%v, want the NodeLabel verbatim", name, ok)
 	}
 	// No fallback to ProductName, and no node-<id> fallback either.
 	if name, ok := n.Name(2); ok {
@@ -63,7 +65,10 @@ func TestNameComesOnlyFromNodeLabel(t *testing.T) {
 }
 
 func TestLabelEdgeCasesCountAsAbsent(t *testing.T) {
-	for _, raw := range []string{`""`, `"   "`, `null`, `123`, `{"a":1}`} {
+	// The last case is a label made only of control characters: MQTT cannot
+	// carry them, so nothing is left to name the device with.
+	ctrl, _ := json.Marshal(string([]rune{1, 2}))
+	for _, raw := range []string{`""`, `"   "`, `null`, `123`, `{"a":1}`, string(ctrl)} {
 		n := NewNamer()
 		n.Recompute([]Node{{NodeID: 1, Attributes: map[string]json.RawMessage{
 			nodeLabelPath: json.RawMessage(raw),
@@ -71,12 +76,6 @@ func TestLabelEdgeCasesCountAsAbsent(t *testing.T) {
 		if name, ok := n.Name(1); ok {
 			t.Errorf("label %s should count as absent, got %q", raw, name)
 		}
-	}
-	// A label that slugs to nothing is also absent.
-	n := NewNamer()
-	n.Recompute([]Node{labelled(1, "___")})
-	if name, ok := n.Name(1); ok {
-		t.Errorf("unsluggable label should count as absent, got %q", name)
 	}
 }
 
@@ -95,18 +94,35 @@ func TestCollisionsAreDisambiguatedDeterministically(t *testing.T) {
 			t.Fatalf("node %d: %q vs %q - name depends on arrival order", id, an, bn)
 		}
 	}
-	if n4, _ := a.Name(4); n4 != "sensor-4" {
+	if n4, _ := a.Name(4); n4 != "Sensor-4" {
 		t.Fatalf("node 4 = %q", n4)
 	}
-	if n9, _ := a.Name(9); n9 != "sensor-9" {
+	if n9, _ := a.Name(9); n9 != "Sensor-9" {
 		t.Fatalf("node 9 = %q", n9)
 	}
-	if n2, _ := a.Name(2); n2 != "unique" {
+	if n2, _ := a.Name(2); n2 != "Unique" {
 		t.Fatalf("non-colliding node was suffixed: %q", n2)
 	}
 
 	if got := a.Collisions(nodes); len(got) != 1 || len(got["sensor"]) != 2 {
 		t.Fatalf("collision report = %+v", got)
+	}
+}
+
+func TestLabelsDifferingOnlyByCaseCollide(t *testing.T) {
+	// Lookup folds case, so "Sensor" and "sensor" would resolve to the same
+	// node id. They must be treated as a collision and suffixed.
+	n := NewNamer()
+	n.Recompute([]Node{labelled(4, "Sensor"), labelled(9, "sensor")})
+
+	if got, _ := n.Name(4); got != "Sensor-4" {
+		t.Fatalf("node 4 = %q", got)
+	}
+	if got, _ := n.Name(9); got != "sensor-9" {
+		t.Fatalf("node 9 = %q", got)
+	}
+	if id, ok := n.Lookup("SENSOR-9"); !ok || id != 9 {
+		t.Fatalf("lookup = %d %v", id, ok)
 	}
 }
 
@@ -140,10 +156,10 @@ func TestLookupIsReversibleAndCaseInsensitive(t *testing.T) {
 	n := NewNamer()
 	n.Recompute([]Node{labelled(7, "Kitchen Sensor"), labelled(8, "")})
 
-	if id, ok := n.Lookup("kitchen-sensor"); !ok || id != 7 {
+	if id, ok := n.Lookup("Kitchen Sensor"); !ok || id != 7 {
 		t.Fatalf("lookup = %d %v", id, ok)
 	}
-	if id, ok := n.Lookup("KITCHEN-SENSOR"); !ok || id != 7 {
+	if id, ok := n.Lookup("kitchen sensor"); !ok || id != 7 {
 		t.Fatalf("lookup should be case-insensitive: %d %v", id, ok)
 	}
 	if _, ok := n.Lookup("someproduct"); ok {
@@ -185,7 +201,25 @@ func TestLabelledDeviceGetsNamedTopics(t *testing.T) {
 	b.namer.Recompute(b.Nodes())
 	b.publishNode(n)
 
-	want := "m/named/kitchen-sensor/1/TemperatureMeasurement/MeasuredValue"
+	want := "m/named/Kitchen Sensor/1/TemperatureMeasurement/MeasuredValue"
+	b.topicsMu.Lock()
+	defer b.topicsMu.Unlock()
+	if _, ok := b.topics[4][want]; !ok {
+		t.Fatalf("expected %s among %d tracked topics", want, len(b.topics[4]))
+	}
+}
+
+func TestSpacedAndMixedCaseLabelReachesTheTopicVerbatim(t *testing.T) {
+	m, _ := LoadModel("")
+	b := NewBridge(&Config{TopicPrefix: "m", RetainState: true, PublishNames: true}, m)
+
+	n := labelled(4, "TEMP Ikea")
+	n.Attributes["1/1026/0"] = json.RawMessage(`2137`)
+	b.cacheNode(n)
+	b.namer.Recompute(b.Nodes())
+	b.publishNode(n)
+
+	want := "m/named/TEMP Ikea/1/TemperatureMeasurement/MeasuredValue"
 	b.topicsMu.Lock()
 	defer b.topicsMu.Unlock()
 	if _, ok := b.topics[4][want]; !ok {
@@ -199,7 +233,7 @@ func TestResolveNodeAcceptsNameOrID(t *testing.T) {
 	b.cacheNode(labelled(4, "Kitchen Sensor"))
 	b.namer.Recompute(b.Nodes())
 
-	if id, err := b.resolveNode("kitchen-sensor"); err != nil || id != 4 {
+	if id, err := b.resolveNode("Kitchen Sensor"); err != nil || id != 4 {
 		t.Fatalf("by name: %d %v", id, err)
 	}
 	if id, err := b.resolveNode("4"); err != nil || id != 4 {

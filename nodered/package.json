@@ -1,0 +1,51 @@
+{
+  "name": "@webfrank/node-red-contrib-matter2mqtt",
+  "version": "0.1.2",
+  "description": "Node-RED nodes for the matter2mqtt bridge: discover Matter devices by NodeLabel and receive MeasuredValue readings converted to engineering units.",
+  "keywords": [
+    "node-red",
+    "matter",
+    "mqtt",
+    "matter2mqtt",
+    "thread",
+    "home-automation"
+  ],
+  "license": "MIT",
+  "author": "Francesco Boscarino",
+  "homepage": "https://github.com/webfrank/matter2mqtt/tree/main/nodered",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webfrank/matter2mqtt.git",
+    "directory": "nodered"
+  },
+  "bugs": {
+    "url": "https://github.com/webfrank/matter2mqtt/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "dependencies": {
+    "mqtt": "^5.7.0"
+  },
+  "node-red": {
+    "version": ">=3.0.0",
+    "nodes": {
+      "matter2mqtt-broker": "nodes/matter2mqtt-broker.js",
+      "matter2mqtt-in": "nodes/matter2mqtt-in.js",
+      "matter2mqtt-out": "nodes/matter2mqtt-out.js",
+      "matter2mqtt-device": "nodes/matter2mqtt-device.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "nodes/",
+    "examples/",
+    "README.md"
+  ]
+}

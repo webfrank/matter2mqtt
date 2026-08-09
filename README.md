@@ -5,7 +5,7 @@ python-matter-server WebSocket API on one side and publishes a Zigbee2MQTT-style
 topic tree on the other.
 
 Thread mesh is routed by SLZB-06U Thread + OTBR firmware.
-
+docker context 
 The Matter protocol work is delegated entirely to
 [python-matter-server](https://github.com/home-assistant-libs/python-matter-server)
 (the CHIP SDK under the hood). This service holds no Matter state of its own —
@@ -22,21 +22,21 @@ implementation underneath can be replaced without touching them.
 ## Topic schema
 
 Prefix is configurable via `MQTT_TOPIC_PREFIX` (default `matter`). All examples
-below assume `vapp/matter`.
+below assume `matter`.
 
 ### State (published, retained)
 
 | Topic | Payload |
 |---|---|
-| `vapp/matter/bridge/availability` | `online` / `offline` (LWT) |
-| `vapp/matter/bridge/matter_connected` | `true` / `false` |
-| `vapp/matter/bridge/info` | matter-server info: sdk version, schema version, fabric id |
-| `vapp/matter/node/<id>/availability` | `online` / `offline` |
-| `vapp/matter/node/<id>/descriptor` | vendor/product/serial from Basic Information, endpoint list |
-| `vapp/matter/node/<id>/<endpoint>/<cluster>/<attribute>` | raw JSON value |
-| `vapp/matter/named/<label>/<endpoint>/<ClusterName>/<AttributeName>` | same value, keyed by NodeLabel |
-| `vapp/matter/node/<id>/name` | current name; absent when the device has no NodeLabel |
-| `vapp/matter/node/<id>/event/<endpoint>/<cluster>/<event>` | event payload (not retained) |
+| `matter/bridge/availability` | `online` / `offline` (LWT) |
+| `matter/bridge/matter_connected` | `true` / `false` |
+| `matter/bridge/info` | matter-server info: sdk version, schema version, fabric id |
+| `matter/node/<id>/availability` | `online` / `offline` |
+| `matter/node/<id>/descriptor` | vendor/product/serial from Basic Information, endpoint list |
+| `matter/node/<id>/<endpoint>/<cluster>/<attribute>` | raw JSON value |
+| `matter/named/<label>/<endpoint>/<ClusterName>/<AttributeName>` | same value, keyed by NodeLabel |
+| `matter/node/<id>/name` | current name; absent when the device has no NodeLabel |
+| `matter/node/<id>/event/<endpoint>/<cluster>/<event>` | event payload (not retained) |
 
 The **numeric tree is canonical**; the `named/` tree is a mirror, published only
 when both the cluster and attribute resolve in the data model. A partial model
@@ -45,8 +45,8 @@ therefore yields fewer aliases, never a half-numeric path. Set
 retained topic count.
 
 ```
-vapp/matter/node/4/1/1026/0                                          ->  2137
-vapp/matter/named/kitchen-sensor/1/TemperatureMeasurement/MeasuredValue  ->  2137
+matter/node/4/1/1026/0                                          ->  2137
+matter/named/Kitchen Sensor/1/TemperatureMeasurement/MeasuredValue  ->  2137
 ```
 
 ## Device names
@@ -68,7 +68,7 @@ ecosystem shows.
 Write NodeLabel to the device:
 
 ```bash
-mosquitto_pub -t 'vapp/matter/node/9/0/40/5/set' -m '"Ingresso"'
+mosquitto_pub -t 'matter/node/9/0/40/5/set' -m '"Ingresso"'
 ```
 
 Or use the **Device label** field in the web console. Either way the change
@@ -76,17 +76,21 @@ takes effect immediately: the device reports the new label back, the bridge
 recomputes, clears the retained topics under the old name, and republishes under
 the new one. Clearing the label removes the device from `named/` again.
 
-Labels are slugged into safe topic segments — lowercase ASCII, dashes for
-separators, never `/`, `+` or `#`. `Temp/Humidity #1` becomes `temp-humidity-1`.
+The label is used **verbatim** as the topic segment — case, spaces, punctuation
+and accents all preserved. `TEMP Ikea` stays `TEMP Ikea`, not `temp-ikea`.
 
-`vapp/matter/node/<id>/name` carries the current name for id-to-name mapping,
+Only what MQTT cannot carry in a topic name is rewritten: `/`, `+` and `#`
+become `-`, and control characters are dropped. So `Temp/Humidity #1` becomes
+`Temp-Humidity -1`. A label left with nothing after that counts as no label.
+
+`matter/node/<id>/name` carries the current name for id-to-name mapping,
 and is cleared when a device has no label.
 
 ### Duplicate labels
 
 Two devices sharing a label would otherwise interleave their state onto one
 retained topic, so **every** member of a colliding set is suffixed with its node
-id — `sensor-4` and `sensor-9`, with neither keeping the bare `sensor`. The
+id — `Sensor-4` and `Sensor-9`, with neither keeping the bare `Sensor`. The
 result is deterministic regardless of discovery order, and the bridge logs a
 warning naming the devices involved. Give them distinct labels to clear it.
 
@@ -95,8 +99,8 @@ warning naming the devices involved. Give them distinct labels to clear it.
 Command topics accept a name or a node id anywhere in the `named/` tree:
 
 ```
-vapp/matter/named/salotto/1/OnOff/command       <-  {"command":"Toggle"}
-vapp/matter/named/4/1/OnOff/command             <-  {"command":"Toggle"}
+matter/named/Salotto/1/OnOff/command       <-  {"command":"Toggle"}
+matter/named/4/1/OnOff/command             <-  {"command":"Toggle"}
 ```
 
 Numeric IDs are stable across spec revisions; names are not. Automate against
@@ -109,7 +113,7 @@ Descriptor cluster on each endpoint:
 ```json
 {
   "node_id": 4,
-  "name": "kitchen-sensor",
+  "name": "Kitchen Sensor",
   "named": true,
   "vendor_name": "IKEA of Sweden",
   "product_name": "Vallhorn",
@@ -121,6 +125,20 @@ Descriptor cluster on each endpoint:
   }
 }
 ```
+
+## Node-RED
+
+`nodered/` holds a companion npm package, `node-red-contrib-matter2mqtt`, that
+consumes this bridge over MQTT: devices are found by NodeLabel, and readings
+arrive already converted — 21.37 °C rather than 2137. Attribute writes, cluster
+commands and the `bridge/request` passthrough (with response correlation) are
+covered too. See [nodered/README.md](nodered/README.md).
+
+The conversion is fixed by the Matter specification **per cluster**, not per
+vendor: 1026 Temperature and 1029 RelativeHumidity are ×100, 1027 Pressure and
+1028 Flow are ×10, and 1024 Illuminance is `10000 × log10(lux) + 1`. Nothing
+about it can be derived from vendor or product info, and clusters outside that
+list are passed through untouched.
 
 ## Web console
 
@@ -206,16 +224,16 @@ built in and resolve for every cluster, including ones absent from the model.
 **Write an attribute** — payload is the bare JSON value:
 
 ```
-vapp/matter/node/4/1/8/17/set                        <-  128
-vapp/matter/named/4/1/LevelControl/OnLevel/set       <-  128
+matter/node/4/1/8/17/set                        <-  128
+matter/named/4/1/LevelControl/OnLevel/set       <-  128
 ```
 
 **Invoke a cluster command:**
 
 ```
-vapp/matter/node/4/1/6/command                       <-  {"command":"Toggle"}
-vapp/matter/named/4/1/OnOff/command                  <-  {"command":"Toggle"}
-vapp/matter/node/4/1/8/command                       <-  {"command":"MoveToLevel","payload":{"level":128,"transitionTime":10}}
+matter/node/4/1/6/command                       <-  {"command":"Toggle"}
+matter/named/4/1/OnOff/command                  <-  {"command":"Toggle"}
+matter/node/4/1/8/command                       <-  {"command":"MoveToLevel","payload":{"level":128,"transitionTime":10}}
 ```
 
 Both trees accept both forms — cluster and attribute segments are resolved by
@@ -226,8 +244,8 @@ string payload (`Toggle`) is also accepted.
 **Bridge operations** — generic passthrough to any matter-server command:
 
 ```
-vapp/matter/bridge/request/<command>   <-  <args as JSON object>
-vapp/matter/bridge/response/<command>  ->  {"command":..., "success":true, "result":...}
+matter/bridge/request/<command>   <-  <args as JSON object>
+matter/bridge/response/<command>  ->  {"command":..., "success":true, "result":...}
 ```
 
 Because it is a passthrough, new matter-server API surface works without a code
@@ -235,19 +253,19 @@ change here. Useful ones:
 
 ```bash
 # Push your Thread dataset into the controller (hex TLV from your OTBR)
-mosquitto_pub -t vapp/matter/bridge/request/set_thread_dataset \
+mosquitto_pub -t matter/bridge/request/set_thread_dataset \
   -m '{"dataset":"0e08000000000001000..."}'
 
 # Commission a device — matter-server does BLE + Thread join itself
-mosquitto_pub -t vapp/matter/bridge/request/commission_with_code \
+mosquitto_pub -t matter/bridge/request/commission_with_code \
   -m '{"code":"MT:Y.K90-Q000KA0648G00"}'
 
 # Reopen a commissioning window for another admin
-mosquitto_pub -t vapp/matter/bridge/request/open_commissioning_window \
+mosquitto_pub -t matter/bridge/request/open_commissioning_window \
   -m '{"node_id":4}'
 
-mosquitto_pub -t vapp/matter/bridge/request/remove_node -m '{"node_id":4}'
-mosquitto_pub -t vapp/matter/bridge/request/get_nodes   -m '{}'
+mosquitto_pub -t matter/bridge/request/remove_node -m '{"node_id":4}'
+mosquitto_pub -t matter/bridge/request/get_nodes   -m '{}'
 ```
 
 Add `"_request_id":"abc"` to any request and it is echoed in the response, for

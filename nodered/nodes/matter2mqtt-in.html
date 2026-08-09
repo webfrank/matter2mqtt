@@ -1,0 +1,179 @@
+<script type="text/javascript">
+  RED.nodes.registerType('matter2mqtt in', {
+    category: 'matter2mqtt',
+    color: '#7fbfdf',
+    defaults: {
+      name: { value: '' },
+      broker: { value: '', type: 'matter2mqtt-broker', required: true },
+      device: { value: '', required: true },
+      mode: { value: 'measured' },
+      custom: { value: '' },
+      endpoint: { value: '' },
+      scale: { value: true },
+      precision: { value: '' },
+      onNull: { value: 'send' }
+    },
+    inputs: 0,
+    outputs: 1,
+    icon: 'font-awesome/fa-thermometer-half',
+    label: function () {
+      return this.name || this.device || 'matter2mqtt in'
+    },
+    labelStyle: function () {
+      return this.name ? 'node_label_italic' : ''
+    },
+    oneditprepare: function () {
+      const configured = this.device
+
+      $('#node-input-mode').on('change', function () {
+        $('.m2m-custom-row').toggle($('#node-input-mode').val() === 'custom')
+      })
+      $('#node-input-mode').trigger('change')
+
+      function loadDevices () {
+        window.matter2mqtt.populateDevices({
+          brokerInput: '#node-input-broker',
+          select: '#node-input-device',
+          hint: '#m2m-discovery-hint',
+          current: $('#node-input-device').val() || configured,
+        })
+      }
+
+      $('#m2m-refresh').on('click', function (e) {
+        e.preventDefault()
+        loadDevices()
+      })
+      $('#node-input-broker').on('change', loadDevices)
+      loadDevices()
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="matter2mqtt in">
+  <div class="form-row">
+    <label for="node-input-broker"><i class="fa fa-server"></i> Broker</label>
+    <input type="text" id="node-input-broker">
+  </div>
+  <div class="form-row">
+    <label for="node-input-device"><i class="fa fa-tag"></i> Device</label>
+    <select id="node-input-device" style="width:70%"></select>
+    <a href="#" id="m2m-refresh" class="red-ui-button red-ui-button-small" title="Rediscover">
+      <i class="fa fa-refresh"></i>
+    </a>
+  </div>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <span id="m2m-discovery-hint" style="color:#888"></span>
+  </div>
+  <hr>
+  <div class="form-row">
+    <label for="node-input-mode"><i class="fa fa-filter"></i> Report</label>
+    <select id="node-input-mode">
+      <option value="measured">MeasuredValue only</option>
+      <option value="all">Every attribute</option>
+      <option value="custom">Selected clusters</option>
+    </select>
+  </div>
+  <div class="form-row m2m-custom-row">
+    <label for="node-input-custom"><i class="fa fa-list"></i> Clusters</label>
+    <input type="text" id="node-input-custom" placeholder="1026, 1029/0">
+  </div>
+  <div class="form-row">
+    <label for="node-input-endpoint"><i class="fa fa-plug"></i> Endpoint</label>
+    <input type="text" id="node-input-endpoint" placeholder="all endpoints">
+  </div>
+  <hr>
+  <div class="form-row">
+    <label for="node-input-scale"><i class="fa fa-calculator"></i> Convert</label>
+    <input type="checkbox" id="node-input-scale" style="width:auto;vertical-align:top">
+    <span>apply the Matter unit conversion (÷100 for °C and %, …)</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-precision"><i class="fa fa-superscript"></i> Decimals</label>
+    <input type="text" id="node-input-precision" placeholder="per cluster default">
+  </div>
+  <div class="form-row">
+    <label for="node-input-onNull"><i class="fa fa-question-circle"></i> Unknown</label>
+    <select id="node-input-onNull">
+      <option value="send">send as null</option>
+      <option value="drop">drop the message</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="optional">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="matter2mqtt in">
+  <p>
+    Subscribes to one Matter device, found by its <b>NodeLabel</b>, and emits
+    its readings already converted to engineering units.
+  </p>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">number | null</span></dt>
+    <dd>the converted value — 21.37 rather than 2137. <code>null</code> means the device reports the reading as unknown.</dd>
+    <dt>topic <span class="property-type">string</span></dt>
+    <dd><code>&lt;device&gt;/&lt;endpoint&gt;/&lt;ClusterName&gt;/&lt;AttributeName&gt;</code></dd>
+    <dt>matter <span class="property-type">object</span></dt>
+    <dd>
+      <code>nodeId</code>, <code>name</code>, <code>endpoint</code>,
+      <code>cluster</code>, <code>attribute</code>, <code>unit</code>,
+      <code>raw</code> (the value before conversion), <code>scaled</code>
+      (false when the cluster has no defined conversion) and
+      <code>available</code>.
+    </dd>
+  </dl>
+
+  <h3>Discovery</h3>
+  <p>
+    The <b>Device</b> list is filled from the fabric the broker has actually
+    discovered — every device with a NodeLabel, with its node id, product and
+    online state. Offline devices are still selectable: a sleeping sensor is a
+    valid target and binds when it reports again. Press the refresh button after
+    commissioning or relabelling something.
+  </p>
+  <p>
+    The list needs a <i>deployed</i> broker config node, since it comes from
+    live retained topics. A device configured earlier but not currently
+    advertised is kept and marked <i>not discovered</i>, so a flow is never
+    silently rewired by opening this dialog while the broker is down.
+  </p>
+  <p>
+    At runtime the name is resolved continuously, not once at deploy: a device
+    that is offline, renamed, or commissioned later binds as soon as the bridge
+    retains its name topic. The label is matched verbatim — <i>TEMP Ikea</i> is
+    <i>TEMP Ikea</i>, capitals and spaces included — with a case-insensitive
+    fallback.
+  </p>
+
+  <h3>Filtering</h3>
+  <p>
+    <b>MeasuredValue only</b> means attribute 0 <i>of a cluster that defines a
+    MeasuredValue</i>. Every cluster has an attribute 0 — on Identify it is
+    IdentifyTime, on Descriptor it is DeviceTypeList — so those are not
+    reported. The concentration clusters (CO₂, PM2.5, …) are recognised from the
+    device descriptor and reported unconverted.
+  </p>
+
+  <h3>Conversion</h3>
+  <p>
+    The scaling is fixed by the Matter specification per <i>cluster</i>, so it
+    is the same for every vendor — nothing is derived from vendor or product
+    info:
+  </p>
+  <ul>
+    <li><b>1026</b> Temperature — ÷100 → °C</li>
+    <li><b>1029</b> RelativeHumidity — ÷100 → %</li>
+    <li><b>1027</b> Pressure — ÷10 → kPa</li>
+    <li><b>1028</b> Flow — ÷10 → m³/h</li>
+    <li><b>1024</b> Illuminance — <code>10^((v−1)/10000)</code> → lx</li>
+  </ul>
+  <p>
+    Any other cluster is passed through untouched with
+    <code>msg.matter.scaled = false</code>; the concentration clusters (CO₂,
+    PM2.5, …) already report a float in their own unit and must not be divided.
+  </p>
+</script>

@@ -1,0 +1,128 @@
+<script type="text/javascript">
+  // Shared by the in/out/device edit dialogs: fill a <select> from the live
+  // registry on a broker config node, so a device is picked from what the
+  // fabric actually advertises rather than typed from memory.
+  window.matter2mqtt = window.matter2mqtt || {}
+  window.matter2mqtt.populateDevices = function (opts) {
+    var $broker = $(opts.brokerInput)
+    var $select = $(opts.select)
+    var $hint = $(opts.hint)
+    // The saved value, captured before the list replaces the options.
+    var current = opts.current === undefined ? $select.val() : opts.current
+
+    function reset () {
+      $select.empty()
+      if (opts.blankLabel !== undefined) {
+        $('<option>').val('').text(opts.blankLabel).appendTo($select)
+      }
+    }
+
+    // A device that is not in the list right now - broker still connecting,
+    // device removed, NodeLabel cleared - must not be silently dropped from a
+    // deployed flow, so it is kept as an explicit, clearly marked option.
+    function keepCurrent (found) {
+      if (!current || found) return
+      $('<option>')
+        .val(current)
+        .text(current + '  (not discovered)')
+        .appendTo($select)
+    }
+
+    function finish (message) {
+      keepCurrent($select.find('option').filter(function () {
+        return $(this).val() === current
+      }).length > 0)
+      $select.val(current || '')
+      $hint.text(message || '')
+    }
+
+    var brokerId = $broker.val()
+    reset()
+    if (!brokerId || brokerId === '_ADD_') {
+      return finish('Select a broker, then deploy, to discover devices.')
+    }
+
+    $hint.text('Loading…')
+    $.getJSON('matter2mqtt/' + brokerId + '/devices')
+      .done(function (data) {
+        reset()
+        ;(data.devices || []).forEach(function (d) {
+          var label = d.name + '  —  node ' + d.nodeId
+          if (d.product) label += ', ' + d.product
+          if (d.available === false) label += '  (offline)'
+          $('<option>').val(d.name).text(label).appendTo($select)
+        })
+        if (!data.connected) {
+          return finish('Broker not connected — deploy it, then reopen this dialog.')
+        }
+        if (!(data.devices || []).length) {
+          return finish('Connected, but no device has a NodeLabel yet.')
+        }
+        finish(data.devices.length + ' device(s) discovered')
+      })
+      .fail(function () {
+        reset()
+        finish('Could not reach the broker config node.')
+      })
+  }
+
+  RED.nodes.registerType('matter2mqtt-broker', {
+    category: 'config',
+    defaults: {
+      name: { value: '' },
+      brokerUrl: { value: 'mqtt://127.0.0.1:1883', required: true },
+      prefix: { value: 'matter', required: true },
+      clientIdPrefix: { value: 'node-red-matter2mqtt' }
+    },
+    credentials: {
+      user: { type: 'text' },
+      password: { type: 'password' }
+    },
+    label: function () {
+      return this.name || this.brokerUrl + '/' + this.prefix
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="matter2mqtt-broker">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="optional">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-brokerUrl"><i class="fa fa-server"></i> Broker</label>
+    <input type="text" id="node-config-input-brokerUrl" placeholder="mqtt://127.0.0.1:1883">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-prefix"><i class="fa fa-sitemap"></i> Topic prefix</label>
+    <input type="text" id="node-config-input-prefix" placeholder="matter">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-user"><i class="fa fa-user"></i> Username</label>
+    <input type="text" id="node-config-input-user" placeholder="optional">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-password"><i class="fa fa-lock"></i> Password</label>
+    <input type="password" id="node-config-input-password" placeholder="optional">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-clientIdPrefix"><i class="fa fa-id-badge"></i> Client id</label>
+    <input type="text" id="node-config-input-clientIdPrefix" placeholder="node-red-matter2mqtt">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="matter2mqtt-broker">
+  <p>Connection to the MQTT broker a <b>matter2mqtt</b> bridge publishes to.</p>
+  <p>
+    One connection is shared by every node that selects this config, along with
+    a device registry built from the bridge's retained
+    <code>&lt;prefix&gt;/node/&lt;id&gt;/name</code> topics. That is what makes
+    discovery by name work with no polling: retained messages replay on connect
+    and on every reconnect.
+  </p>
+  <p>
+    <b>Topic prefix</b> must match the bridge's <code>MQTT_TOPIC_PREFIX</code>
+    (default <code>matter</code>; a multi-level prefix such as
+    <code>matter</code> is fine).
+  </p>
+</script>

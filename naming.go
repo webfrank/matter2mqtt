@@ -59,12 +59,12 @@ func (n *Namer) Recompute(nodes []Node) (changed []uint64) {
 	base := make(map[uint64]string, len(nodes))
 	counts := make(map[string]int, len(nodes))
 	for _, node := range nodes {
-		name := slug(labelOf(node))
+		name := topicSegment(labelOf(node))
 		if name == "" {
 			continue // no label: no name, no named/ topics
 		}
 		base[node.NodeID] = name
-		counts[name]++
+		counts[strings.ToLower(name)]++
 	}
 
 	next := make(map[uint64]string, len(base))
@@ -73,7 +73,8 @@ func (n *Namer) Recompute(nodes []Node) (changed []uint64) {
 		// Two devices sharing a label would otherwise interleave their state
 		// onto one retained topic, so every member of a colliding set is
 		// disambiguated by node id. Deterministic regardless of arrival order.
-		if counts[name] > 1 {
+		// Compared case-insensitively, because lookup is.
+		if counts[strings.ToLower(name)] > 1 {
 			name = name + "-" + strconv.FormatUint(id, 10)
 		}
 		next[id] = name
@@ -100,12 +101,14 @@ func (n *Namer) Recompute(nodes []Node) (changed []uint64) {
 }
 
 // Collisions reports names shared by more than one device before
-// disambiguation, so the bridge can warn about them.
+// disambiguation, so the bridge can warn about them. Keyed by the folded name,
+// since names that differ only by case still collide on lookup.
 func (n *Namer) Collisions(nodes []Node) map[string][]uint64 {
 	groups := map[string][]uint64{}
 	for _, node := range nodes {
-		if name := slug(labelOf(node)); name != "" {
-			groups[name] = append(groups[name], node.NodeID)
+		if name := topicSegment(labelOf(node)); name != "" {
+			key := strings.ToLower(name)
+			groups[key] = append(groups[key], node.NodeID)
 		}
 	}
 	for name, ids := range groups {
@@ -132,30 +135,33 @@ func labelOf(node Node) string {
 	return strings.TrimSpace(s)
 }
 
-// slug produces a safe, stable MQTT topic segment: lowercase ASCII, dashes for
-// separators, never a wildcard or level separator.
-func slug(in string) string {
+// maxSegment bounds the topic segment. Matter caps NodeLabel at 32 characters,
+// so this only ever trips on a misbehaving device.
+const maxSegment = 128
+
+// topicSegment turns a NodeLabel into an MQTT topic segment, keeping the label
+// verbatim - case, spaces, punctuation and accents included - so "TEMP Ikea"
+// stays "TEMP Ikea".
+//
+// Only what MQTT cannot carry in a topic name is rewritten: the level separator
+// and the two wildcards become a dash, and control characters (including NUL,
+// which the spec forbids outright) are dropped.
+func topicSegment(in string) string {
 	var b strings.Builder
-	lastDash := true // suppresses a leading dash
-	for _, r := range strings.ToLower(strings.TrimSpace(in)) {
-		switch {
-		case r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)):
-			b.WriteRune(r)
-			lastDash = false
-		case r == '.' || r == ':':
-			b.WriteRune(r)
-			lastDash = false
-		default:
-			// Spaces, /, +, #, accents and punctuation all collapse to a dash.
-			if !lastDash {
-				b.WriteByte('-')
-				lastDash = true
-			}
+	n := 0
+	for _, r := range strings.TrimSpace(in) {
+		if n == maxSegment {
+			break
 		}
+		switch {
+		case r == '/' || r == '+' || r == '#':
+			b.WriteByte('-')
+		case unicode.IsControl(r) || r == unicode.ReplacementChar:
+			continue // dropped, and does not count towards the bound
+		default:
+			b.WriteRune(r)
+		}
+		n++
 	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 48 {
-		out = strings.Trim(out[:48], "-")
-	}
-	return out
+	return strings.TrimSpace(b.String())
 }

@@ -199,9 +199,9 @@ func (b *Bridge) connectMQTT(ctx context.Context) error {
 		SetPassword(b.cfg.MQTTPassword).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
-		SetMaxReconnectInterval(30 * time.Second).
+		SetMaxReconnectInterval(30*time.Second).
 		SetConnectRetry(true).
-		SetConnectRetryInterval(5 * time.Second).
+		SetConnectRetryInterval(5*time.Second).
 		SetWill(b.t("bridge/availability"), "offline", b.cfg.MQTTQoS, true)
 
 	opts.SetOnConnectHandler(func(c mqtt.Client) {

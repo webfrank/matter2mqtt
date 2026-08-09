@@ -1,0 +1,84 @@
+<script type="text/javascript">
+  RED.nodes.registerType('matter2mqtt device', {
+    category: 'matter2mqtt',
+    color: '#7fbfdf',
+    defaults: {
+      name: { value: '' },
+      broker: { value: '', type: 'matter2mqtt-broker', required: true },
+      device: { value: '' },
+      emitOnChange: { value: true }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-sitemap',
+    label: function () {
+      return this.name || this.device || 'matter2mqtt fabric'
+    },
+    labelStyle: function () {
+      return this.name ? 'node_label_italic' : ''
+    },
+    oneditprepare: function () {
+      const configured = this.device
+
+      function loadDevices () {
+        window.matter2mqtt.populateDevices({
+          brokerInput: '#node-input-broker',
+          select: '#node-input-device',
+          hint: '#m2m-dev-hint',
+          current: $('#node-input-device').val() || configured,
+          blankLabel: '— the whole fabric —',
+        })
+      }
+
+      $('#m2m-dev-refresh').on('click', function (e) {
+        e.preventDefault()
+        loadDevices()
+      })
+      $('#node-input-broker').on('change', loadDevices)
+      loadDevices()
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="matter2mqtt device">
+  <div class="form-row">
+    <label for="node-input-broker"><i class="fa fa-server"></i> Broker</label>
+    <input type="text" id="node-input-broker">
+  </div>
+  <div class="form-row">
+    <label for="node-input-device"><i class="fa fa-tag"></i> Device</label>
+    <select id="node-input-device" style="width:70%"></select>
+    <a href="#" id="m2m-dev-refresh" class="red-ui-button red-ui-button-small" title="Rediscover">
+      <i class="fa fa-refresh"></i>
+    </a>
+  </div>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <span id="m2m-dev-hint" style="color:#888"></span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-emitOnChange"><i class="fa fa-bolt"></i> Emit</label>
+    <input type="checkbox" id="node-input-emitOnChange" style="width:auto;vertical-align:top">
+    <span>send a message whenever discovery changes</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="optional">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="matter2mqtt device">
+  <p>Reports the fabric as the bridge advertises it.</p>
+  <p>
+    With <b>Device</b> set, tracks that one device and emits on every presence
+    or descriptor change: <code>{nodeId, name, available, descriptor}</code>.
+    Left blank, emits the whole discovered fabric as
+    <code>{devices: [...], count}</code> — how a flow finds out what exists
+    without hard-coding anything.
+  </p>
+  <p>Any input message re-emits the current snapshot on demand.</p>
+  <p>
+    Only devices with a NodeLabel are listed: the bridge deliberately withholds
+    the name of an unlabelled device rather than inventing one.
+  </p>
+</script>

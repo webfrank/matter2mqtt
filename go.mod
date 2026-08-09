@@ -1,4 +1,4 @@
-module github.com/bizmate/matter2mqtt
+module github.com/webfrank/matter2mqtt
 
 go 1.26
 

@@ -188,8 +188,8 @@ func TestTopicParts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load model: %v", err)
 	}
-	b := NewBridge(&Config{TopicPrefix: "vapp/matter"}, m)
-	got := b.topicParts("vapp/matter/node/4/1/6/0/set")
+	b := NewBridge(&Config{TopicPrefix: "matter"}, m)
+	got := b.topicParts("matter/node/4/1/6/0/set")
 	want := []string{"node", "4", "1", "6", "0", "set"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v want %v", got, want)
@@ -265,7 +265,7 @@ func TestDescribeEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load model: %v", err)
 	}
-	b := NewBridge(&Config{TopicPrefix: "vapp/matter"}, m)
+	b := NewBridge(&Config{TopicPrefix: "matter"}, m)
 
 	n := Node{NodeID: 4, Attributes: map[string]json.RawMessage{
 		"1/29/0": json.RawMessage(`[{"deviceType": 770, "revision": 2}]`),

@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net"
 	"os"
 	"strconv"
@@ -42,6 +46,95 @@ type Config struct {
 	HTTPPassword string
 
 	LogLevel string
+}
+
+// defaultEnvFile is consulted when ENV_FILE is unset. Missing is not an error:
+// a container gets its settings from the compose environment block, and only a
+// local run needs the file.
+const defaultEnvFile = ".env"
+
+// LoadDotEnv reads KEY=VALUE pairs from a .env file into the process
+// environment, so running the binary straight from a checkout picks up the same
+// settings a container gets from compose. It returns the file it read and how
+// many variables it set.
+//
+// The real environment always wins: a variable already exported is never
+// overwritten, so a container or a one-off `MQTT_BROKER=... ./matter2mqtt`
+// still overrides the file.
+//
+// ENV_FILE selects a different path, and unlike the default it must exist -
+// asking for a file that is not there is a configuration error, not a silent
+// no-op. It is read from the real environment only, for obvious reasons.
+func LoadDotEnv() (path string, set int, err error) {
+	path = os.Getenv("ENV_FILE")
+	explicit := path != ""
+	if !explicit {
+		path = defaultEnvFile
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		if !explicit && errors.Is(err, fs.ErrNotExist) {
+			return "", 0, nil
+		}
+		return path, 0, err
+	}
+	defer f.Close()
+
+	set, err = parseDotEnv(f)
+	if err != nil {
+		return path, set, fmt.Errorf("%s: %w", path, err)
+	}
+	return path, set, nil
+}
+
+// parseDotEnv follows the same rules as compose's env_file, so one file can
+// feed both: blank lines and lines whose first non-space character is `#` are
+// skipped, an `export ` prefix is tolerated, and everything after the first `=`
+// is the value - there are no inline comments, which keeps a `#` inside a
+// password intact. Surrounding quotes are stripped, and escapes inside double
+// quotes are interpreted.
+func parseDotEnv(r io.Reader) (set int, err error) {
+	sc := bufio.NewScanner(r)
+	for line := 1; sc.Scan(); line++ {
+		s := strings.TrimSpace(sc.Text())
+		if s == "" || strings.HasPrefix(s, "#") {
+			continue
+		}
+		s = strings.TrimPrefix(s, "export ")
+
+		key, val, ok := strings.Cut(s, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			return set, fmt.Errorf("line %d: %q is not KEY=VALUE", line, sc.Text())
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue // the real environment wins
+		}
+		if err := os.Setenv(key, unquoteEnv(strings.TrimSpace(val))); err != nil {
+			return set, fmt.Errorf("line %d: %w", line, err)
+		}
+		set++
+	}
+	return set, sc.Err()
+}
+
+func unquoteEnv(v string) string {
+	if len(v) < 2 || v[0] != v[len(v)-1] {
+		return v
+	}
+	switch v[0] {
+	case '"':
+		// Interpret \n and friends, but keep the raw text when the value is not
+		// a valid Go string literal - a password is not required to be one.
+		if s, err := strconv.Unquote(v); err == nil {
+			return s
+		}
+		return v[1 : len(v)-1]
+	case '\'':
+		return v[1 : len(v)-1] // single quotes are literal
+	}
+	return v
 }
 
 func LoadConfig() (*Config, error) {

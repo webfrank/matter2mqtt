@@ -1,0 +1,170 @@
+<script type="text/javascript">
+  RED.nodes.registerType('matter2mqtt out', {
+    category: 'matter2mqtt',
+    color: '#7fbfdf',
+    align: 'right',
+    defaults: {
+      name: { value: '' },
+      broker: { value: '', type: 'matter2mqtt-broker', required: true },
+      mode: { value: 'set' },
+      device: { value: '' },
+      endpoint: { value: '1' },
+      cluster: { value: '' },
+      attribute: { value: '' },
+      command: { value: '' },
+      scale: { value: true },
+      timeout: { value: 60 }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-sign-out',
+    label: function () {
+      if (this.name) return this.name
+      if (this.mode === 'request') return this.command || 'bridge request'
+      if (this.mode === 'command') return this.command || 'command'
+      return this.device || 'matter2mqtt out'
+    },
+    labelStyle: function () {
+      return this.name ? 'node_label_italic' : ''
+    },
+    oneditprepare: function () {
+      const configured = this.device
+
+      function refresh () {
+        const mode = $('#node-input-mode').val()
+        $('.m2m-device-row').toggle(mode !== 'request')
+        $('.m2m-attr-row').toggle(mode === 'set')
+        $('.m2m-command-row').toggle(mode !== 'set')
+        $('.m2m-scale-row').toggle(mode === 'set')
+        $('.m2m-timeout-row').toggle(mode === 'request')
+      }
+      $('#node-input-mode').on('change', refresh)
+      refresh()
+
+      function loadDevices () {
+        window.matter2mqtt.populateDevices({
+          brokerInput: '#node-input-broker',
+          select: '#node-input-device',
+          hint: '#m2m-out-hint',
+          current: $('#node-input-device').val() || configured,
+          blankLabel: '— set per message (msg.device) —',
+        })
+      }
+
+      $('#m2m-out-refresh').on('click', function (e) {
+        e.preventDefault()
+        loadDevices()
+      })
+      $('#node-input-broker').on('change', loadDevices)
+      loadDevices()
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="matter2mqtt out">
+  <div class="form-row">
+    <label for="node-input-broker"><i class="fa fa-server"></i> Broker</label>
+    <input type="text" id="node-input-broker">
+  </div>
+  <div class="form-row">
+    <label for="node-input-mode"><i class="fa fa-paper-plane"></i> Action</label>
+    <select id="node-input-mode">
+      <option value="set">Write attribute</option>
+      <option value="command">Cluster command</option>
+      <option value="request">Bridge request</option>
+    </select>
+  </div>
+  <div class="form-row m2m-device-row">
+    <label for="node-input-device"><i class="fa fa-tag"></i> Device</label>
+    <select id="node-input-device" style="width:70%"></select>
+    <a href="#" id="m2m-out-refresh" class="red-ui-button red-ui-button-small" title="Rediscover">
+      <i class="fa fa-refresh"></i>
+    </a>
+  </div>
+  <div class="form-row m2m-device-row">
+    <label>&nbsp;</label>
+    <span id="m2m-out-hint" style="color:#888"></span>
+  </div>
+  <div class="form-row m2m-device-row">
+    <label for="node-input-endpoint"><i class="fa fa-plug"></i> Endpoint</label>
+    <input type="text" id="node-input-endpoint" placeholder="1">
+  </div>
+  <div class="form-row m2m-device-row">
+    <label for="node-input-cluster"><i class="fa fa-cube"></i> Cluster</label>
+    <input type="text" id="node-input-cluster" placeholder="OnOff or 6">
+  </div>
+  <div class="form-row m2m-attr-row">
+    <label for="node-input-attribute"><i class="fa fa-sliders"></i> Attribute</label>
+    <input type="text" id="node-input-attribute" placeholder="OnLevel or 17">
+  </div>
+  <div class="form-row m2m-command-row">
+    <label for="node-input-command"><i class="fa fa-bolt"></i> Command</label>
+    <input type="text" id="node-input-command" placeholder="Toggle, or set_thread_dataset">
+  </div>
+  <div class="form-row m2m-scale-row">
+    <label for="node-input-scale"><i class="fa fa-calculator"></i> Convert</label>
+    <input type="checkbox" id="node-input-scale" style="width:auto;vertical-align:top">
+    <span>apply the inverse Matter conversion (×100 for °C and %, …)</span>
+  </div>
+  <div class="form-row m2m-timeout-row">
+    <label for="node-input-timeout"><i class="fa fa-clock-o"></i> Timeout</label>
+    <input type="text" id="node-input-timeout" placeholder="60"> seconds
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="optional">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="matter2mqtt out">
+  <p>Writes attributes, invokes cluster commands, and issues bridge requests.</p>
+
+  <h3>Write attribute</h3>
+  <p>
+    Publishes <code>msg.payload</code> as the bare JSON value to
+    <code>&lt;prefix&gt;/node/&lt;id&gt;/&lt;ep&gt;/&lt;cluster&gt;/&lt;attr&gt;/set</code>.
+  </p>
+  <p>
+    With <b>Convert</b> on, the inverse of the read conversion is applied, so a
+    flow sends 21.5 rather than 2150. Only clusters with a spec-defined
+    conversion are touched — everything else is written exactly as given.
+  </p>
+
+  <h3>Cluster command</h3>
+  <p>
+    Sends <code>{"command": "Toggle"}</code>, or
+    <code>{"command": …, "payload": msg.payload}</code> when the payload is an
+    object. A payload that already contains a <code>command</code> key is sent
+    unchanged, so a flow can build the whole envelope itself.
+  </p>
+
+  <h3>Bridge request</h3>
+  <p>
+    The generic matter-server passthrough:
+    <code>commission_with_code</code>, <code>set_thread_dataset</code>,
+    <code>open_commissioning_window</code>, <code>remove_node</code>, and
+    anything else the controller accepts — no node change needed for new API
+    surface. <code>msg.payload</code> is the arguments object.
+  </p>
+  <p>
+    This is the only mode that produces output: a <code>_request_id</code> is
+    attached and the matching reply is emitted as <code>msg.payload</code>
+    (<code>msg.matter.response</code> holds the full envelope). A failed or
+    unanswered request raises a node error a <b>catch</b> node can handle.
+    Commissioning is slow — keep the timeout generous.
+  </p>
+  <p>
+    <b>Writes and cluster commands are fire-and-forget</b>: the bridge does not
+    acknowledge them, so nothing is emitted. Confirm them by watching the
+    resulting attribute report on a <b>matter2mqtt in</b> node.
+  </p>
+
+  <h3>Per-message overrides</h3>
+  <p>
+    <code>msg.device</code>, <code>msg.endpoint</code>,
+    <code>msg.cluster</code>, <code>msg.attribute</code> and
+    <code>msg.command</code> each override the configured field, so one node can
+    serve a whole flow. Cluster and attribute accept a name or a number — the
+    bridge resolves either.
+  </p>
+</script>

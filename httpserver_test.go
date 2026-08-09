@@ -19,7 +19,7 @@ func newTestServer(t *testing.T, cfg *Config) (*Server, *Bridge) {
 		t.Fatalf("load model: %v", err)
 	}
 	if cfg == nil {
-		cfg = &Config{TopicPrefix: "vapp/matter", MatterCallTimeout: 5 * time.Second, HTTPAddr: "127.0.0.1:0"}
+		cfg = &Config{TopicPrefix: "matter", MatterCallTimeout: 5 * time.Second, HTTPAddr: "127.0.0.1:0"}
 	}
 	b := NewBridge(cfg, m)
 	return NewServer(cfg, b), b
@@ -107,9 +107,9 @@ func TestConsoleRejectsNonLoopbackWithoutAuth(t *testing.T) {
 func TestConsoleNodesIncludeDecodedEndpoints(t *testing.T) {
 	s, b := newTestServer(t, nil)
 	b.cacheNode(Node{NodeID: 4, Available: true, Attributes: map[string]json.RawMessage{
-		"0/40/3": json.RawMessage(`"Vallhorn"`),
-		"1/29/0": json.RawMessage(`[{"deviceType": 770, "revision": 2}]`),
-		"1/29/1": json.RawMessage(`[1026]`),
+		"0/40/3":   json.RawMessage(`"Vallhorn"`),
+		"1/29/0":   json.RawMessage(`[{"deviceType": 770, "revision": 2}]`),
+		"1/29/1":   json.RawMessage(`[1026]`),
 		"1/1026/0": json.RawMessage(`2137`),
 	}})
 

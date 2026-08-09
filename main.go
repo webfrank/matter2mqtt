@@ -12,6 +12,13 @@ import (
 )
 
 func main() {
+	// Before LoadConfig, so the file can set LOG_LEVEL like any other variable.
+	envFile, envVars, err := LoadDotEnv()
+	if err != nil {
+		slog.Error("could not read env file", "err", err)
+		os.Exit(2)
+	}
+
 	cfg, err := LoadConfig()
 	if err != nil {
 		slog.Error("invalid configuration", "err", err)
@@ -21,6 +28,10 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: parseLevel(cfg.LogLevel),
 	})))
+
+	if envVars > 0 {
+		slog.Info("loaded env file", "path", envFile, "vars", envVars)
+	}
 
 	model, err := LoadModel(cfg.ModelPath)
 	if err != nil {

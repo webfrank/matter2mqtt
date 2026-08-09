@@ -23,7 +23,7 @@ services:
 
   matter2mqtt:
     build: .
-    image: bizmate/matter2mqtt:latest
+    image: matter2mqtt:latest
     container_name: matter2mqtt
     restart: unless-stopped
     network_mode: host
@@ -38,11 +38,11 @@ services:
       MATTER_WS_URL: ws://127.0.0.1:5580/ws
       MATTER_CALL_TIMEOUT: 60s
       MATTER_MODEL_PATH: /model.json
-      MQTT_BROKER: tcp://mqtt.bizmate.it:1883
+      MQTT_BROKER: tcp://localhost:1883
       MQTT_CLIENT_ID: matter2mqtt
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
-      MQTT_TOPIC_PREFIX: vapp/matter
+      MQTT_TOPIC_PREFIX: matter
       MQTT_QOS: "0"
       MQTT_RETAIN: "true"
       MQTT_PUBLISH_NAMES: "true"
