@@ -1,0 +1,56 @@
+# python-matter-server needs host networking for mDNS + IPv6 reachability into
+# the Thread mesh. The bridge itself does not, but it must be able to reach the
+# matter-server websocket; running both on the host keeps that trivial.
+#
+# NOTE: network_mode: host is not supported by Docker Swarm services. Run this
+# stack with plain `docker compose` on the host that owns the Matter fabric.
+
+services:
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - apparmor=unconfined
+    volumes:
+      - ./matter-data:/data
+      - /run/dbus:/run/dbus:ro      # BlueZ, for BLE commissioning
+    command: >
+      --storage-path /data
+      --bluetooth-adapter 0
+      --paa-root-cert-dir /data/credentials
+
+  matter2mqtt:
+    build: .
+    image: bizmate/matter2mqtt:latest
+    container_name: matter2mqtt
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - matter-server
+    volumes:
+      # Optional: mount a generated model.json to override the embedded seed.
+      # Regenerate with:
+      #   docker exec matter-server python3 - < tools/dump-model.py > model.json
+      - ./model.json:/model.json:ro
+    environment:
+      MATTER_WS_URL: ws://127.0.0.1:5580/ws
+      MATTER_CALL_TIMEOUT: 60s
+      MATTER_MODEL_PATH: /model.json
+      MQTT_BROKER: tcp://mqtt.bizmate.it:1883
+      MQTT_CLIENT_ID: matter2mqtt
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TOPIC_PREFIX: vapp/matter
+      MQTT_QOS: "0"
+      MQTT_RETAIN: "true"
+      MQTT_PUBLISH_NAMES: "true"
+      # Web console. Loopback-only by default; with network_mode: host that is
+      # the host's loopback, so reach it over SSH or set credentials below.
+      HTTP_ENABLED: "true"
+      HTTP_ADDR: 127.0.0.1:8099
+      # HTTP_ADDR: 0.0.0.0:8099        # requires the two lines below
+      # HTTP_USERNAME: ops
+      # HTTP_PASSWORD: ${CONSOLE_PASSWORD:-}
+      LOG_LEVEL: info

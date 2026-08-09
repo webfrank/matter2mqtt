@@ -1,0 +1,223 @@
+{
+ "_comment": "Seed model. Partial by design - regenerate the complete, SDK-exact map with: docker exec matter-server python3 - < tools/dump-model.py > model.json",
+ "clusters": {
+  "3": {
+   "name": "Identify",
+   "attributes": {"0": "IdentifyTime", "1": "IdentifyType"}
+  },
+  "4": {
+   "name": "Groups",
+   "attributes": {"0": "NameSupport"}
+  },
+  "6": {
+   "name": "OnOff",
+   "attributes": {
+    "0": "OnOff",
+    "16384": "GlobalSceneControl",
+    "16385": "OnTime",
+    "16386": "OffWaitTime",
+    "16387": "StartUpOnOff"
+   }
+  },
+  "8": {
+   "name": "LevelControl",
+   "attributes": {
+    "0": "CurrentLevel",
+    "1": "RemainingTime",
+    "2": "MinLevel",
+    "3": "MaxLevel",
+    "4": "CurrentFrequency",
+    "15": "Options",
+    "16": "OnOffTransitionTime",
+    "17": "OnLevel",
+    "18": "OnTransitionTime",
+    "19": "OffTransitionTime",
+    "20": "DefaultMoveRate",
+    "16384": "StartUpCurrentLevel"
+   }
+  },
+  "29": {
+   "name": "Descriptor",
+   "attributes": {
+    "0": "DeviceTypeList",
+    "1": "ServerList",
+    "2": "ClientList",
+    "3": "PartsList",
+    "4": "TagList"
+   }
+  },
+  "40": {
+   "name": "BasicInformation",
+   "attributes": {
+    "0": "DataModelRevision",
+    "1": "VendorName",
+    "2": "VendorID",
+    "3": "ProductName",
+    "4": "ProductID",
+    "5": "NodeLabel",
+    "6": "Location",
+    "7": "HardwareVersion",
+    "8": "HardwareVersionString",
+    "9": "SoftwareVersion",
+    "10": "SoftwareVersionString",
+    "11": "ManufacturingDate",
+    "12": "PartNumber",
+    "13": "ProductURL",
+    "14": "ProductLabel",
+    "15": "SerialNumber",
+    "16": "LocalConfigDisabled",
+    "17": "Reachable",
+    "18": "UniqueID"
+   }
+  },
+  "47": {
+   "name": "PowerSource",
+   "attributes": {
+    "0": "Status",
+    "1": "Order",
+    "2": "Description",
+    "11": "BatVoltage",
+    "12": "BatPercentRemaining",
+    "13": "BatTimeRemaining",
+    "14": "BatChargeLevel",
+    "15": "BatReplacementNeeded",
+    "16": "BatReplaceability",
+    "17": "BatPresent"
+   }
+  },
+  "59": {
+   "name": "Switch",
+   "attributes": {
+    "0": "NumberOfPositions",
+    "1": "CurrentPosition",
+    "2": "MultiPressMax"
+   }
+  },
+  "69": {
+   "name": "BooleanState",
+   "attributes": {"0": "StateValue"}
+  },
+  "257": {
+   "name": "DoorLock",
+   "attributes": {
+    "0": "LockState",
+    "1": "LockType",
+    "2": "ActuatorEnabled",
+    "3": "DoorState"
+   }
+  },
+  "258": {
+   "name": "WindowCovering",
+   "attributes": {
+    "0": "Type",
+    "7": "ConfigStatus",
+    "10": "OperationalStatus",
+    "13": "EndProductType",
+    "14": "CurrentPositionLiftPercent100ths",
+    "15": "CurrentPositionTiltPercent100ths",
+    "23": "Mode"
+   }
+  },
+  "513": {
+   "name": "Thermostat",
+   "attributes": {
+    "0": "LocalTemperature",
+    "1": "OutdoorTemperature",
+    "2": "Occupancy",
+    "17": "OccupiedCoolingSetpoint",
+    "18": "OccupiedHeatingSetpoint",
+    "27": "ControlSequenceOfOperation",
+    "28": "SystemMode",
+    "41": "ThermostatRunningMode"
+   }
+  },
+  "768": {
+   "name": "ColorControl",
+   "attributes": {
+    "0": "CurrentHue",
+    "1": "CurrentSaturation",
+    "3": "CurrentX",
+    "4": "CurrentY",
+    "7": "ColorTemperatureMireds",
+    "8": "ColorMode"
+   }
+  },
+  "1024": {
+   "name": "IlluminanceMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "Tolerance",
+    "4": "LightSensorType"
+   }
+  },
+  "1026": {
+   "name": "TemperatureMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "Tolerance"
+   }
+  },
+  "1027": {
+   "name": "PressureMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "Tolerance"
+   }
+  },
+  "1028": {
+   "name": "FlowMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "Tolerance"
+   }
+  },
+  "1029": {
+   "name": "RelativeHumidityMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "Tolerance"
+   }
+  },
+  "1030": {
+   "name": "OccupancySensing",
+   "attributes": {
+    "0": "Occupancy",
+    "1": "OccupancySensorType",
+    "2": "OccupancySensorTypeBitmap"
+   }
+  }
+ },
+ "device_types": {
+  "10": "DoorLock",
+  "15": "GenericSwitch",
+  "17": "PowerSource",
+  "19": "BridgedNode",
+  "21": "ContactSensor",
+  "22": "RootNode",
+  "256": "OnOffLight",
+  "257": "DimmableLight",
+  "259": "OnOffLightSwitch",
+  "262": "LightSensor",
+  "263": "OccupancySensor",
+  "266": "OnOffPlugInUnit",
+  "267": "DimmablePlugInUnit",
+  "268": "ColorTemperatureLight",
+  "269": "ExtendedColorLight",
+  "514": "WindowCovering",
+  "769": "Thermostat",
+  "770": "TemperatureSensor",
+  "773": "PressureSensor",
+  "774": "FlowSensor",
+  "775": "HumiditySensor"
+ }
+}

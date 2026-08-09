@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>matter2mqtt console</title>
+<style>
+:root {
+  --ground: #e6e9e4;
+  --panel: #fbfcfa;
+  --sunk: #eff1ec;
+  --ink: #14181b;
+  --muted: #5e686c;
+  --rule: #c6cdc6;
+  --live: #0c6f62;
+  --act: #a8123f;
+  --warn: #8a5a00;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+
+/* ---------- header + signal trace (the console's pulse) ---------- */
+header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
+  align-items: center;
+  padding: 10px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 20;
+}
+.wordmark { font-size: 14px; font-weight: 700; letter-spacing: -0.04em; }
+.wordmark span { color: var(--live); }
+#trace { display: block; width: 100%; height: 34px; background: var(--sunk); border: 1px solid var(--rule); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border: 1px solid var(--rule); background: var(--sunk);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--live); }
+.dot.off { background: var(--act); }
+
+/* ---------- layout ---------- */
+main { display: grid; grid-template-columns: 320px 1fr; gap: 14px; padding: 14px; align-items: start; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+.panel { background: var(--panel); border: 1px solid var(--rule); margin-bottom: 14px; }
+.panel > h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 9px 12px; border-bottom: 1px solid var(--rule); background: var(--sunk);
+}
+.panel .body { padding: 12px; }
+
+label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 10px 0 4px; }
+label:first-child { margin-top: 0; }
+input, select, textarea, button {
+  font-family: var(--mono); font-size: 13px; color: var(--ink);
+}
+input, select, textarea {
+  width: 100%; padding: 7px 9px; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 0;
+}
+textarea { resize: vertical; min-height: 62px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--live); outline-offset: 1px;
+}
+button {
+  padding: 7px 13px; background: var(--ink); color: var(--panel);
+  border: 1px solid var(--ink); cursor: pointer;
+  text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em;
+}
+button:hover { background: var(--live); border-color: var(--live); }
+button.act { background: var(--act); border-color: var(--act); }
+button.act:hover { filter: brightness(1.15); }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+button.ghost:hover { background: var(--sunk); color: var(--ink); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.row { display: flex; gap: 8px; align-items: flex-end; }
+.row > * { flex: 1; }
+.row > button { flex: 0 0 auto; }
+
+/* segmented control for commissioning mode */
+.seg { display: flex; border: 1px solid var(--rule); }
+.seg button {
+  flex: 1; background: var(--panel); color: var(--muted); border: 0; border-right: 1px solid var(--rule);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.seg button:hover { background: var(--sunk); color: var(--ink); }
+.seg button[aria-pressed="true"]:hover { background: var(--ink); color: var(--panel); }
+
+/* ---------- node list ---------- */
+.node {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 9px; align-items: center;
+  padding: 9px 12px; border-bottom: 1px solid var(--rule); cursor: pointer; background: none;
+  width: 100%; text-align: left; text-transform: none; letter-spacing: 0; color: var(--ink);
+}
+.node:hover { background: var(--sunk); }
+.node[aria-current="true"] { background: var(--sunk); box-shadow: inset 3px 0 0 var(--live); }
+.node .id { font-weight: 700; font-size: 15px; }
+.node .name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ---------- attribute tables ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th {
+  text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); font-weight: 400; padding: 6px 8px; border-bottom: 1px solid var(--rule);
+}
+td { padding: 5px 8px; border-bottom: 1px solid var(--sunk); vertical-align: top; }
+td.val { color: var(--live); word-break: break-all; max-width: 340px; }
+tr.flash td { animation: flash 900ms ease-out; }
+@keyframes flash { from { background: #cfe9e3; } to { background: transparent; } }
+.epname { font-weight: 700; }
+.tag {
+  display: inline-block; padding: 1px 6px; background: var(--sunk);
+  border: 1px solid var(--rule); font-size: 10px; color: var(--muted); margin-left: 6px;
+}
+.num { color: var(--muted); font-size: 11px; }
+
+details { border-top: 1px solid var(--rule); }
+details:first-of-type { border-top: 0; }
+summary { padding: 9px 12px; cursor: pointer; font-weight: 700; background: var(--sunk); }
+summary::marker { color: var(--live); }
+
+pre {
+  margin: 0; padding: 10px; background: var(--sunk); border: 1px solid var(--rule);
+  font-size: 11px; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all;
+}
+.log-entry { border-bottom: 1px solid var(--rule); padding: 8px 12px; }
+.log-entry .hd { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; margin-bottom: 5px; }
+.log-entry.ok .hd strong { color: var(--live); }
+.log-entry.err .hd strong { color: var(--act); }
+.log-entry time { color: var(--muted); }
+
+.empty { padding: 26px 14px; text-align: center; color: var(--muted); font-size: 12px; }
+.empty strong { display: block; color: var(--ink); font-size: 13px; margin-bottom: 5px; }
+.hint { font-size: 11px; color: var(--muted); margin-top: 7px; font-family: var(--sans); }
+
+#toast {
+  position: fixed; bottom: 16px; right: 16px; z-index: 50;
+  max-width: 380px; padding: 11px 14px; border: 1px solid var(--ink);
+  background: var(--panel); box-shadow: 4px 4px 0 rgba(20,24,27,0.14);
+  opacity: 0; transform: translateY(6px); transition: opacity .18s, transform .18s;
+}
+#toast.show { opacity: 1; transform: none; }
+#toast.err { border-color: var(--act); }
+#toast .t { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">matter<span>2</span>mqtt</div>
+  <canvas id="trace" aria-label="Live attribute report activity"></canvas>
+  <div class="chips">
+    <span class="chip"><span class="dot" id="d-matter"></span>matter</span>
+    <span class="chip"><span class="dot" id="d-mqtt"></span>mqtt</span>
+    <span class="chip" id="c-nodes">0 nodes</span>
+  </div>
+</header>
+
+<main>
+  <div>
+    <section class="panel">
+      <h2>Add a device</h2>
+      <div class="body">
+        <div class="seg" role="group" aria-label="Pairing method">
+          <button id="m-code" aria-pressed="true">Pairing code</button>
+          <button id="m-pin" aria-pressed="false">PIN + discriminator</button>
+        </div>
+
+        <div id="f-code">
+          <label for="in-code">Manual code or QR payload</label>
+          <input id="in-code" placeholder="34970112332" autocomplete="off">
+          <label style="display:flex;gap:7px;align-items:center;text-transform:none;letter-spacing:0;font-size:11px;">
+            <input type="checkbox" id="in-netonly" checked style="width:auto;"> Skip Bluetooth (device already on the network)
+          </label>
+        </div>
+
+        <div id="f-pin" hidden>
+          <label for="in-pin">Setup PIN code</label>
+          <input id="in-pin" inputmode="numeric" placeholder="34567890" autocomplete="off">
+          <label for="in-disc">Discriminator</label>
+          <input id="in-disc" inputmode="numeric" placeholder="3840" autocomplete="off">
+        </div>
+
+        <div style="margin-top:12px">
+          <button id="btn-commission" class="act" style="width:100%">Add device</button>
+        </div>
+        <p class="hint">Open a commissioning window on the device first. Codes from the factory label stop working once it has been paired.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Fabric</h2>
+      <div id="nodes"><div class="empty">Waiting for the node list…</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Thread credentials</h2>
+      <div class="body">
+        <label for="in-dataset">Active operational dataset (hex)</label>
+        <textarea id="in-dataset" placeholder="0e08000000000001000…" spellcheck="false"></textarea>
+        <div style="margin-top:9px"><button id="btn-dataset" class="ghost" style="width:100%">Store dataset</button></div>
+        <p class="hint">Only needed for Bluetooth commissioning. If another commissioner already joined the device to your mesh, skip this.</p>
+      </div>
+    </section>
+  </div>
+
+  <div>
+    <section class="panel" id="detail">
+      <h2>Device</h2>
+      <div class="empty"><strong>No device selected</strong>Pick one from the fabric list to read its attributes and send commands.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Run a command</h2>
+      <div class="body">
+        <div class="row">
+          <div>
+            <label for="in-cmd">Command</label>
+            <input id="in-cmd" list="cmds" placeholder="get_nodes" autocomplete="off">
+            <datalist id="cmds"></datalist>
+          </div>
+          <button id="btn-run">Run</button>
+        </div>
+        <label for="in-args">Arguments (JSON)</label>
+        <textarea id="in-args" spellcheck="false">{}</textarea>
+        <p class="hint">Sends straight to matter-server, same as publishing to the bridge request topic.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Activity</h2>
+      <div id="log"><div class="empty">Command results appear here.</div></div>
+    </section>
+  </div>
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+const KNOWN_COMMANDS = [
+  "get_nodes", "get_node", "commission_with_code", "commission_on_network",
+  "open_commissioning_window", "remove_node", "interview_node", "ping_node",
+  "read_attribute", "write_attribute", "device_command", "set_thread_dataset",
+  "set_wifi_credentials", "discover_commissionable_nodes", "start_listening",
+  "set_node_binding", "check_node_update", "update_node", "diagnostics"
+];
+
+const $ = (id) => document.getElementById(id);
+const state = { model: null, nodes: [], selected: null, reduced: false, prefix: "matter" };
+state.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------------- signal trace ---------------- */
+const trace = $("trace");
+const tctx = trace.getContext("2d");
+let ticks = [];
+const WINDOW_MS = 60000;
+const TICK_COLORS = { attribute: "#0c6f62", node: "#a8123f", node_event: "#8a5a00", status: "#5e686c" };
+
+function sizeTrace() {
+  const dpr = window.devicePixelRatio || 1;
+  const r = trace.getBoundingClientRect();
+  trace.width = Math.max(1, Math.round(r.width * dpr));
+  trace.height = Math.max(1, Math.round(r.height * dpr));
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawTrace();
+}
+window.addEventListener("resize", sizeTrace);
+
+function drawTrace() {
+  const r = trace.getBoundingClientRect();
+  const w = r.width, h = r.height;
+  tctx.clearRect(0, 0, w, h);
+
+  // baseline grid: one hairline every 10s, so the trace reads as elapsed time
+  tctx.strokeStyle = "#d5dad3";
+  tctx.lineWidth = 1;
+  for (let s = 0; s <= 60; s += 10) {
+    const x = Math.round(w - (s / 60) * w) + 0.5;
+    tctx.beginPath(); tctx.moveTo(x, 0); tctx.lineTo(x, h); tctx.stroke();
+  }
+
+  const now = Date.now();
+  ticks = ticks.filter((t) => now - t.at < WINDOW_MS);
+  for (const t of ticks) {
+    const age = (now - t.at) / WINDOW_MS;
+    const x = w - age * w;
+    const len = t.kind === "attribute" ? h * 0.55 : h * 0.85;
+    tctx.strokeStyle = TICK_COLORS[t.kind] || "#5e686c";
+    tctx.lineWidth = 2;
+    tctx.beginPath();
+    tctx.moveTo(x, h);
+    tctx.lineTo(x, h - len);
+    tctx.stroke();
+  }
+}
+
+function addTick(kind) {
+  ticks.push({ at: Date.now(), kind });
+  if (ticks.length > 600) ticks.shift();
+  if (state.reduced) drawTrace();
+}
+if (!state.reduced) {
+  const loop = () => { drawTrace(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+
+/* ---------------- helpers ---------------- */
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const text = await res.text();
+  let body;
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { error: text }; }
+  if (!res.ok) throw new Error(body.error || ("request failed: " + res.status));
+  return body;
+}
+
+async function post(path, payload) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+let toastTimer;
+function toast(title, msg, isError) {
+  const el = $("toast");
+  el.className = "show" + (isError ? " err" : "");
+  el.innerHTML = "";
+  const t = document.createElement("div"); t.className = "t"; t.textContent = title;
+  const b = document.createElement("div"); b.textContent = msg;
+  el.append(t, b);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ""; }, 5200);
+}
+
+function logResult(command, ok, payload) {
+  const log = $("log");
+  if (log.querySelector(".empty")) log.innerHTML = "";
+  const entry = document.createElement("div");
+  entry.className = "log-entry " + (ok ? "ok" : "err");
+  const hd = document.createElement("div"); hd.className = "hd";
+  const name = document.createElement("strong"); name.textContent = (ok ? "OK  " : "FAIL  ") + command;
+  const time = document.createElement("time"); time.textContent = new Date().toLocaleTimeString();
+  hd.append(name, time);
+  const pre = document.createElement("pre");
+  pre.textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+  entry.append(hd, pre);
+  log.prepend(entry);
+  while (log.children.length > 25) log.lastChild.remove();
+}
+
+async function runCommand(command, args) {
+  try {
+    const out = await post("/api/command", { command, args: args || {} });
+    logResult(command, true, out.result);
+    toast("Done", command);
+    return out;
+  } catch (err) {
+    logResult(command, false, err.message);
+    toast("Failed", err.message, true);
+    throw err;
+  }
+}
+
+const clusterName = (id) => state.model?.clusters?.[String(id)]?.name || "";
+function attrName(cluster, attr) {
+  const globals = { 65528: "GeneratedCommandList", 65529: "AcceptedCommandList", 65530: "EventList",
+                    65531: "AttributeList", 65532: "FeatureMap", 65533: "ClusterRevision" };
+  if (globals[attr]) return globals[attr];
+  return state.model?.clusters?.[String(cluster)]?.attributes?.[String(attr)] || "";
+}
+
+/* ---------------- fabric list ---------------- */
+function nodeLabel(node) {
+  const a = node.attributes || {};
+  const read = (p) => { try { return JSON.parse(a[p]); } catch { return a[p]; } };
+  return read("0/40/5") || read("0/40/3") || read("0/40/1") || "Unnamed device";
+}
+
+function renderNodes() {
+  const wrap = $("nodes");
+  $("c-nodes").textContent = state.nodes.length + (state.nodes.length === 1 ? " node" : " nodes");
+
+  if (!state.nodes.length) {
+    wrap.innerHTML = '<div class="empty"><strong>No devices yet</strong>Add one using a pairing code above.</div>';
+    return;
+  }
+  wrap.innerHTML = "";
+  for (const node of state.nodes) {
+    const b = document.createElement("button");
+    b.className = "node";
+    b.setAttribute("aria-current", String(state.selected === node.node_id));
+    const dot = document.createElement("span");
+    dot.className = "dot " + (node.available ? "on" : "off");
+    const mid = document.createElement("span");
+    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = nodeLabel(node);
+    const sub = document.createElement("div"); sub.className = "sub";
+    sub.textContent = (node.named ? node.name : "no label") + " \u00b7 " + (node.available ? "online" : "offline");
+    mid.append(nm, sub);
+    const id = document.createElement("span"); id.className = "id"; id.textContent = node.node_id;
+    b.append(dot, mid, id);
+    b.onclick = () => { state.selected = node.node_id; renderNodes(); renderDetail(); };
+    wrap.append(b);
+  }
+}
+
+/* ---------------- device detail ---------------- */
+function renderDetail() {
+  const panel = $("detail");
+  const node = state.nodes.find((n) => n.node_id === state.selected);
+  panel.innerHTML = "";
+
+  const h = document.createElement("h2");
+  h.textContent = node ? "Device " + node.node_id + " — " + nodeLabel(node) : "Device";
+  panel.append(h);
+
+  if (!node) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.innerHTML = "<strong>No device selected</strong>Pick one from the fabric list to read its attributes and send commands.";
+    panel.append(e);
+    return;
+  }
+
+  const label = labelOf(node);
+  const rename = document.createElement("div");
+  rename.className = "body";
+  rename.style.borderBottom = "1px solid var(--rule)";
+  rename.innerHTML =
+    '<label for="rn-name">Device label</label>' +
+    '<div class="row">' +
+      '<input id="rn-name" autocomplete="off" placeholder="Kitchen sensor">' +
+      '<button id="rn-save">Save</button>' +
+    "</div>" +
+    '<p class="hint" id="rn-hint"></p>';
+  panel.append(rename);
+  $("rn-name").value = label;
+  $("rn-hint").textContent = node.named
+    ? "Stored on the device. Topics: " + state.prefix + "/named/" + node.name + "/\u2026"
+    : "This device has no label, so it is not published under named/. Give it one to add it.";
+  $("rn-save").onclick = () => setNodeLabel(node.node_id, $("rn-name").value);
+
+  const actions = document.createElement("div");
+  actions.className = "body";
+  actions.style.display = "flex";
+  actions.style.gap = "8px";
+  actions.style.flexWrap = "wrap";
+  const mk = (text, cls, fn) => {
+    const b = document.createElement("button");
+    b.textContent = text; if (cls) b.className = cls; b.onclick = fn; return b;
+  };
+  actions.append(
+    mk("Share device", "ghost", async () => {
+      const out = await runCommand("open_commissioning_window", { node_id: node.node_id });
+      const r = out.result || {};
+      if (r.setup_manual_code || r.setup_pin_code) {
+        toast("Pairing code", String(r.setup_manual_code || r.setup_pin_code));
+      }
+    }),
+    mk("Re-interview", "ghost", () => runCommand("interview_node", { node_id: node.node_id })),
+    mk("Ping", "ghost", () => runCommand("ping_node", { node_id: node.node_id })),
+    mk("Remove", "act", () => {
+      if (confirm("Remove device " + node.node_id + " from the fabric? It will need commissioning again.")) {
+        runCommand("remove_node", { node_id: node.node_id });
+      }
+    })
+  );
+  panel.append(actions);
+
+  // Group attributes by endpoint, then cluster.
+  const byEp = {};
+  for (const [path, raw] of Object.entries(node.attributes || {})) {
+    const [ep, cl, at] = path.split("/");
+    (byEp[ep] ||= {});
+    (byEp[ep][cl] ||= []).push({ at, raw, path });
+  }
+
+  const eps = Object.keys(byEp).sort((a, b) => Number(a) - Number(b));
+  for (const ep of eps) {
+    const d = document.createElement("details");
+    if (ep !== "0") d.open = true;
+
+    const s = document.createElement("summary");
+    const types = (node.endpoints?.[ep]?.device_types || []).map((t) => t.name || t.id).join(", ");
+    s.innerHTML = '<span class="epname">Endpoint ' + ep + "</span>" +
+                  (types ? '<span class="tag">' + types + "</span>" : "");
+    d.append(s);
+
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr><th>Cluster</th><th>Attribute</th><th>Value</th><th></th></tr></thead>";
+    const tbody = document.createElement("tbody");
+
+    for (const cl of Object.keys(byEp[ep]).sort((a, b) => Number(a) - Number(b))) {
+      const rows = byEp[ep][cl].sort((a, b) => Number(a.at) - Number(b.at));
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        tr.dataset.path = ep + "/" + cl + "/" + r.at;
+
+        const c1 = document.createElement("td");
+        c1.innerHTML = (clusterName(cl) || "Cluster " + cl) + ' <span class="num">' + cl + "</span>";
+        const c2 = document.createElement("td");
+        c2.innerHTML = (attrName(cl, r.at) || "Attribute " + r.at) + ' <span class="num">' + r.at + "</span>";
+        const c3 = document.createElement("td"); c3.className = "val";
+        c3.textContent = typeof r.raw === "string" ? r.raw : JSON.stringify(r.raw);
+        const c4 = document.createElement("td");
+        const wbtn = document.createElement("button");
+        wbtn.className = "ghost"; wbtn.textContent = "Write";
+        wbtn.onclick = () => writeAttribute(node.node_id, ep, cl, r.at, c3.textContent);
+        c4.append(wbtn);
+
+        tr.append(c1, c2, c3, c4);
+        tbody.append(tr);
+      }
+    }
+    table.append(tbody);
+    d.append(table);
+    panel.append(d);
+  }
+
+  // Cluster command sender
+  const cmd = document.createElement("div");
+  cmd.className = "body";
+  cmd.style.borderTop = "1px solid var(--rule)";
+  cmd.innerHTML =
+    '<label for="dc-ep">Send a cluster command</label>' +
+    '<div class="row">' +
+      '<input id="dc-ep" placeholder="endpoint" value="1">' +
+      '<input id="dc-cl" placeholder="cluster (OnOff or 6)">' +
+      '<input id="dc-cmd" placeholder="command (Toggle)">' +
+      '<button id="dc-go">Send</button>' +
+    "</div>" +
+    '<label for="dc-payload">Payload (JSON)</label>' +
+    '<textarea id="dc-payload" spellcheck="false">{}</textarea>';
+  panel.append(cmd);
+
+  $("dc-go").onclick = async () => {
+    let payload;
+    try { payload = JSON.parse($("dc-payload").value || "{}"); }
+    catch { toast("Check the payload", "That is not valid JSON.", true); return; }
+    try {
+      const out = await post("/api/invoke", {
+        node_id: node.node_id,
+        endpoint: Number($("dc-ep").value),
+        cluster: $("dc-cl").value.trim(),
+        command: $("dc-cmd").value.trim(),
+        payload
+      });
+      logResult("device_command", true, out.result);
+      toast("Sent", $("dc-cmd").value.trim());
+    } catch (err) {
+      logResult("device_command", false, err.message);
+      toast("Failed", err.message, true);
+    }
+  };
+}
+
+// The name comes from the device's NodeLabel, so naming is a write to the
+// device rather than bridge-local state. Every ecosystem sees the same label.
+async function setNodeLabel(nodeId, label) {
+  try {
+    await post("/api/write", {
+      node_id: nodeId, endpoint: 0,
+      cluster: "BasicInformation", attribute: "NodeLabel", value: label
+    });
+    toast("Label saved", label ? "Device is now " + label : "Label cleared");
+    setTimeout(loadNodes, 600);   // let the report come back before re-reading
+  } catch (err) {
+    toast("Could not save the label", err.message, true);
+  }
+}
+
+function labelOf(node) {
+  try { return JSON.parse(node.attributes["0/40/5"]) || ""; } catch { return ""; }
+}
+
+async function writeAttribute(nodeId, ep, cluster, attribute, current) {
+  const raw = prompt("New value for " + ep + "/" + cluster + "/" + attribute + " (JSON)", current);
+  if (raw === null) return;
+  let value;
+  try { value = JSON.parse(raw); } catch { value = raw; }
+  try {
+    const out = await post("/api/write", {
+      node_id: nodeId, endpoint: Number(ep), cluster: String(cluster),
+      attribute: String(attribute), value
+    });
+    logResult("write_attribute", true, out.result);
+    toast("Written", ep + "/" + cluster + "/" + attribute);
+  } catch (err) {
+    logResult("write_attribute", false, err.message);
+    toast("Failed", err.message, true);
+  }
+}
+
+/* ---------------- live updates ---------------- */
+function applyAttribute(nodeId, path, value) {
+  const node = state.nodes.find((n) => n.node_id === nodeId);
+  if (node) (node.attributes ||= {})[path] = value;
+
+  if (state.selected !== nodeId) return;
+  const row = document.querySelector('#detail tr[data-path="' + path + '"]');
+  if (!row) { renderDetail(); return; }
+  const cell = row.querySelector("td.val");
+  cell.textContent = typeof value === "string" ? value : JSON.stringify(value);
+  row.classList.remove("flash");
+  void row.offsetWidth;
+  row.classList.add("flash");
+}
+
+function setStatus(st) {
+  $("d-matter").className = "dot " + (st.matter_connected ? "on" : "off");
+  $("d-mqtt").className = "dot " + (st.mqtt_connected ? "on" : "off");
+}
+
+function connectEvents() {
+  const es = new EventSource("/api/events");
+  es.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    addTick(msg.type);
+    if (msg.type === "status") { setStatus(msg.data); }
+    else if (msg.type === "attribute") { applyAttribute(msg.data.node_id, msg.data.path, msg.data.value); }
+    else if (msg.type === "node" || msg.type === "node_removed") { loadNodes(); }
+    else if (msg.type === "node_event") { logResult("node event", true, msg.data); }
+  };
+  es.onerror = () => { es.close(); setTimeout(connectEvents, 3000); };
+}
+
+async function loadNodes() {
+  try {
+    state.nodes = await api("/api/nodes");
+    renderNodes();
+    renderDetail();
+  } catch (err) { toast("Cannot read the fabric", err.message, true); }
+}
+
+/* ---------------- wiring ---------------- */
+$("m-code").onclick = () => {
+  $("m-code").setAttribute("aria-pressed", "true");
+  $("m-pin").setAttribute("aria-pressed", "false");
+  $("f-code").hidden = false; $("f-pin").hidden = true;
+};
+$("m-pin").onclick = () => {
+  $("m-pin").setAttribute("aria-pressed", "true");
+  $("m-code").setAttribute("aria-pressed", "false");
+  $("f-pin").hidden = false; $("f-code").hidden = true;
+};
+
+$("btn-commission").onclick = async (e) => {
+  const btn = e.currentTarget;
+  const usingCode = $("m-code").getAttribute("aria-pressed") === "true";
+  let command, args;
+
+  if (usingCode) {
+    const code = $("in-code").value.trim();
+    if (!code) { toast("Enter a code", "Paste the manual pairing code or QR payload.", true); return; }
+    command = "commission_with_code";
+    args = { code, network_only: $("in-netonly").checked };
+  } else {
+    const pin = Number($("in-pin").value.trim());
+    const disc = Number($("in-disc").value.trim());
+    if (!pin) { toast("Enter a PIN", "The setup PIN code is required.", true); return; }
+    command = "commission_on_network";
+    args = { setup_pin_code: pin };
+    if (disc) { args.filter_type = 2; args.filter = disc; }
+  }
+
+  btn.disabled = true; btn.textContent = "Adding…";
+  try { await runCommand(command, args); await loadNodes(); }
+  catch { /* already logged */ }
+  finally { btn.disabled = false; btn.textContent = "Add device"; }
+};
+
+$("btn-dataset").onclick = async () => {
+  const dataset = $("in-dataset").value.trim();
+  if (!dataset) { toast("Enter a dataset", "Paste the hex operational dataset.", true); return; }
+  try { await runCommand("set_thread_dataset", { dataset }); } catch { /* logged */ }
+};
+
+$("btn-run").onclick = async () => {
+  const command = $("in-cmd").value.trim();
+  if (!command) { toast("Enter a command", "Pick one from the list or type its name.", true); return; }
+  let args;
+  try { args = JSON.parse($("in-args").value || "{}"); }
+  catch { toast("Check the arguments", "That is not valid JSON.", true); return; }
+  try { await runCommand(command, args); } catch { /* logged */ }
+};
+
+(async function init() {
+  $("cmds").innerHTML = KNOWN_COMMANDS.map((c) => '<option value="' + c + '">').join("");
+  sizeTrace();
+  try { state.model = await api("/api/model"); } catch { state.model = { clusters: {} }; }
+  try {
+    const st = await api("/api/status");
+    state.prefix = st.topic_prefix || state.prefix;
+    setStatus(st);
+  } catch { /* the event stream will correct it */ }
+  await loadNodes();
+  connectEvents();
+})();
+</script>
+</body>
+</html>
