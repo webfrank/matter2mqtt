@@ -5,7 +5,7 @@ python-matter-server WebSocket API on one side and publishes a Zigbee2MQTT-style
 topic tree on the other.
 
 Thread mesh is routed by SLZB-06U Thread + OTBR firmware.
-docker context 
+
 The Matter protocol work is delegated entirely to
 [python-matter-server](https://github.com/home-assistant-libs/python-matter-server)
 (the CHIP SDK under the hood). This service holds no Matter state of its own —

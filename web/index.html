@@ -244,8 +244,12 @@ pre {
           </div>
           <button id="btn-run">Run</button>
         </div>
-        <label for="in-args">Arguments (JSON)</label>
+        <div class="row">
+          <label for="in-args" style="margin:0">Arguments (JSON)</label>
+          <button id="btn-sample" class="ghost" title="Replace the arguments with this command's sample">Sample</button>
+        </div>
         <textarea id="in-args" spellcheck="false">{}</textarea>
+        <p class="hint" id="cmd-hint"></p>
         <p class="hint">Sends straight to matter-server, same as publishing to the bridge request topic.</p>
       </div>
     </section>
@@ -262,13 +266,72 @@ pre {
 <script>
 "use strict";
 
-const KNOWN_COMMANDS = [
-  "get_nodes", "get_node", "commission_with_code", "commission_on_network",
-  "open_commissioning_window", "remove_node", "interview_node", "ping_node",
-  "read_attribute", "write_attribute", "device_command", "set_thread_dataset",
-  "set_wifi_credentials", "discover_commissionable_nodes", "start_listening",
-  "set_node_binding", "check_node_update", "update_node", "diagnostics"
-];
+// Every command the runner offers, with a sample argument object and a one-line
+// note. sample:null means the command takes no arguments.
+//
+// The shapes marked "as this bridge sends it" are the ones the Go code itself
+// passes to matter-server, so they are known-good. The rest come from the
+// matter-server API and are a starting point, not gospel: it is a passthrough,
+// so a server upgrade can add or rename an argument without this console
+// noticing.
+const COMMANDS = {
+  start_listening: { sample: null, hint: "No arguments. The bridge issues this itself on connect; running it here just re-dumps the fabric." },
+  diagnostics: { sample: null, hint: "No arguments. Dumps server-side diagnostics." },
+  discover_commissionable_nodes: { sample: null, hint: "No arguments. Lists devices currently advertising for commissioning." },
+
+  get_nodes: { sample: null, hint: "No arguments required. Optional: only_available (boolean) to skip offline nodes." },
+  get_node: { sample: { node_id: 4 }, hint: "One node, in full. node_id is the numeric id from the fabric list." },
+
+  commission_with_code: {
+    sample: { code: "MT:Y.K90-Q000KA0648G00", network_only: false },
+    hint: "As this bridge sends it. code is the QR payload or the 11-digit manual pairing code; network_only skips BLE for a device already on the mesh."
+  },
+  commission_on_network: {
+    sample: { setup_pin_code: 20202021, filter_type: 2, filter: 3840 },
+    hint: "As this bridge sends it. For a device another commissioner already joined. filter_type 2 filters by long discriminator, given in filter; drop both to take any device advertising."
+  },
+  open_commissioning_window: {
+    sample: { node_id: 4 },
+    hint: "Reopens pairing so another admin can join the device. Returns a fresh code and QR payload."
+  },
+  remove_node: { sample: { node_id: 4 }, hint: "Removes the device from the fabric. The bridge then clears all of its retained topics." },
+  interview_node: { sample: { node_id: 4 }, hint: "Re-reads the device's clusters and attributes. Use after a firmware update changes what it exposes." },
+  ping_node: { sample: { node_id: 4 }, hint: "Checks reachability over the operational network." },
+
+  read_attribute: {
+    sample: { node_id: 4, attribute_path: "1/1026/0" },
+    hint: "attribute_path is endpoint/cluster/attribute, all numeric — 1/1026/0 is TemperatureMeasurement MeasuredValue."
+  },
+  write_attribute: {
+    sample: { node_id: 4, attribute_path: "0/40/5", value: "Salotto" },
+    hint: "As this bridge sends it. 0/40/5 is NodeLabel, so this sample renames the device — the same write the named/ tree is keyed on."
+  },
+  device_command: {
+    sample: { node_id: 4, endpoint_id: 1, cluster_id: 6, command_name: "Toggle", payload: {} },
+    hint: "As this bridge sends it. cluster_id and command_name identify the command; payload carries its fields, e.g. {\"level\":128} for MoveToLevel."
+  },
+
+  set_thread_dataset: {
+    sample: { dataset: "0e080000000000010000" },
+    hint: "As this bridge sends it. The hex operational dataset from your border router: ot-ctl dataset active -x."
+  },
+  set_wifi_credentials: {
+    sample: { ssid: "my-iot-ssid", credentials: "wifi-password" },
+    hint: "Credentials handed to Wi-Fi devices during commissioning. Not needed for Thread-only fabrics."
+  },
+
+  check_node_update: { sample: { node_id: 4 }, hint: "Asks the OTA provider whether an update exists for the device." },
+  update_node: {
+    sample: { node_id: 4, software_version: 2 },
+    hint: "Applies an update. Take software_version from what check_node_update reports."
+  },
+  set_node_binding: {
+    sample: null,
+    hint: "Arguments vary by matter-server version — check your server's API before using this one."
+  }
+};
+
+const KNOWN_COMMANDS = Object.keys(COMMANDS);
 
 const $ = (id) => document.getElementById(id);
 const state = { model: null, nodes: [], selected: null, reduced: false, prefix: "matter" };
@@ -702,6 +765,29 @@ $("btn-dataset").onclick = async () => {
   try { await runCommand("set_thread_dataset", { dataset }); } catch { /* logged */ }
 };
 
+// Tracks the sample last written into the box, so switching commands refreshes
+// it but hand-written arguments are never silently thrown away.
+let lastSample = "{}";
+
+function showSample(force) {
+  const spec = COMMANDS[$("in-cmd").value.trim()];
+  const box = $("in-args");
+
+  $("cmd-hint").textContent = spec
+    ? spec.hint
+    : "Not one of the commands this console knows; arguments pass straight through.";
+  if (!spec) return;
+
+  const cur = box.value.trim();
+  if (!force && cur !== "" && cur !== "{}" && cur !== lastSample.trim()) return;
+
+  lastSample = JSON.stringify(spec.sample || {}, null, 2);
+  box.value = lastSample;
+}
+
+$("in-cmd").addEventListener("input", () => showSample(false));
+$("btn-sample").onclick = () => showSample(true);
+
 $("btn-run").onclick = async () => {
   const command = $("in-cmd").value.trim();
   if (!command) { toast("Enter a command", "Pick one from the list or type its name.", true); return; }
@@ -713,6 +799,7 @@ $("btn-run").onclick = async () => {
 
 (async function init() {
   $("cmds").innerHTML = KNOWN_COMMANDS.map((c) => '<option value="' + c + '">').join("");
+  showSample(false);
   sizeTrace();
   try { state.model = await api("/api/model"); } catch { state.model = { clusters: {} }; }
   try {
