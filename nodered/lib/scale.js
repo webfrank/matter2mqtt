@@ -48,14 +48,49 @@ const CLUSTERS = {
   1029: { name: 'RelativeHumidityMeasurement', unit: '%', factor: 100, precision: 2 },
 }
 
-/** clusterName returns the well-known name of a measurement cluster, or ''. */
+/**
+ * State clusters report a reading that is a boolean, not a measurement: a
+ * water leak detector or contact sensor is BooleanState/StateValue, an
+ * occupancy sensor is OccupancySensing/Occupancy. They carry no unit and no
+ * conversion - they are here so "readings only" mode does not drop the
+ * one attribute such a device exists to report.
+ */
+const STATE_CLUSTERS = {
+  69: { name: 'BooleanState', attributes: { 0: 'StateValue' } },
+  // BooleanStateConfiguration accompanies a BooleanState sensor: the alarm
+  // bitmaps and the fault flag are state too, the sensitivity settings are
+  // configuration and stay out of "readings only".
+  128: {
+    name: 'BooleanStateConfiguration',
+    attributes: { 3: 'AlarmsActive', 4: 'AlarmsSuppressed', 7: 'SensorFault' },
+  },
+  1030: { name: 'OccupancySensing', attributes: { 0: 'Occupancy' } },
+}
+
+/** clusterName returns the well-known name of a measurement or state cluster, or ''. */
 function clusterName (cluster) {
-  return (CLUSTERS[cluster] || {}).name || ''
+  return (CLUSTERS[cluster] || STATE_CLUSTERS[cluster] || {}).name || ''
 }
 
 /** attributeName names the attributes common to every measurement cluster. */
 function attributeName (cluster, attribute) {
+  const state = STATE_CLUSTERS[cluster]
+  if (state) return state.attributes[attribute] || ''
   return CLUSTERS[cluster] ? ATTRIBUTE_NAMES[attribute] || '' : ''
+}
+
+/** isState reports whether an attribute is a state cluster's reading. */
+function isState (cluster, attribute) {
+  const state = STATE_CLUSTERS[cluster]
+  return !!state && state.attributes[attribute] !== undefined
+}
+
+/**
+ * isReading reports whether an attribute is the thing a sensor exists to
+ * report: a MeasuredValue, or a state cluster's boolean.
+ */
+function isReading (cluster, attribute, clusterNameHint) {
+  return isMeasuredValue(cluster, attribute, clusterNameHint) || isState(cluster, attribute)
 }
 
 /**
@@ -158,6 +193,7 @@ function round (v, digits) {
 
 module.exports = {
   CLUSTERS,
+  STATE_CLUSTERS,
   SCALED_ATTRIBUTES,
   scale,
   unscale,
@@ -166,4 +202,6 @@ module.exports = {
   attributeName,
   definesMeasuredValue,
   isMeasuredValue,
+  isState,
+  isReading,
 }

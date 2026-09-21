@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { scale, unscale, clusterId, clusterName, attributeName, isMeasuredValue } = require('../lib/scale')
+const { scale, unscale, clusterId, clusterName, attributeName, isMeasuredValue, isReading } = require('../lib/scale')
 
 test('temperature and humidity are divided by 100', () => {
   // The reading an IKEA VALLHORN actually publishes.
@@ -113,4 +113,22 @@ test('MeasuredValue requires a cluster that defines one', () => {
   // attribute 0 is PowerMode.
   assert.ok(!isMeasuredValue(144, 0, 'ElectricalPowerMeasurement'))
   assert.ok(!isMeasuredValue(1066, 1, 'Pm25ConcentrationMeasurement'))
+})
+
+test('state clusters are readings, unconverted', () => {
+  // A water leak detector reports BooleanState/StateValue, not a MeasuredValue.
+  assert.ok(!isMeasuredValue(69, 0))
+  assert.ok(isReading(69, 0))
+  assert.ok(!isReading(69, 1))
+  assert.ok(isReading(1030, 0)) // OccupancySensing.Occupancy
+  assert.strictEqual(clusterName(69), 'BooleanState')
+  assert.strictEqual(attributeName(69, 0), 'StateValue')
+  assert.deepStrictEqual(scale(69, 0, true), { value: true, unit: '', scaled: false })
+
+  // BooleanStateConfiguration: alarms and fault are readings, the sensitivity
+  // settings next to them are configuration.
+  assert.ok(isReading(128, 3))
+  assert.ok(isReading(128, 7))
+  assert.ok(!isReading(128, 0))
+  assert.strictEqual(attributeName(128, 3), 'AlarmsActive')
 })

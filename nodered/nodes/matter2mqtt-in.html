@@ -69,7 +69,7 @@
   <div class="form-row">
     <label for="node-input-mode"><i class="fa fa-filter"></i> Report</label>
     <select id="node-input-mode">
-      <option value="measured">MeasuredValue only</option>
+      <option value="measured">Readings only</option>
       <option value="all">Every attribute</option>
       <option value="custom">Selected clusters</option>
     </select>
@@ -151,11 +151,16 @@
 
   <h3>Filtering</h3>
   <p>
-    <b>MeasuredValue only</b> means attribute 0 <i>of a cluster that defines a
-    MeasuredValue</i>. Every cluster has an attribute 0 — on Identify it is
+    <b>Readings only</b> means attribute 0 <i>of a cluster that defines a
+    reading</i>. Every cluster has an attribute 0 — on Identify it is
     IdentifyTime, on Descriptor it is DeviceTypeList — so those are not
     reported. The concentration clusters (CO₂, PM2.5, …) are recognised from the
-    device descriptor and reported unconverted.
+    device descriptor and reported unconverted, and the boolean sensors —
+    <b>69</b> BooleanState/StateValue (water leak, contact), <b>128</b>
+    BooleanStateConfiguration (AlarmsActive, AlarmsSuppressed, SensorFault) and
+    <b>1030</b> OccupancySensing/Occupancy — are passed through unconverted.
+    Cluster 128's sensitivity settings are configuration, not readings: use
+    <i>Selected clusters</i> for those.
   </p>
 
   <h3>Conversion</h3>

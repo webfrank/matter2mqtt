@@ -60,12 +60,19 @@ mirror is optional (`MQTT_PUBLISH_NAMES=false`) and is skipped for any
 attribute its data model cannot resolve. Subscribing numerically sees every
 reading and yields the cluster id that drives the conversion.
 
-## What "MeasuredValue only" means
+## What "Readings only" means
 
 Attribute 0 **of a cluster that defines a MeasuredValue** — not attribute 0 in
 general. Every cluster has one: on Identify it is `IdentifyTime`, on Descriptor
 it is `DeviceTypeList`, on OnOff it is `OnOff`. Only the clusters in the table
 below, plus the concentration clusters, name it `MeasuredValue`.
+
+Boolean sensors have no MeasuredValue at all: a water leak detector or a
+contact sensor reports `69` BooleanState/`StateValue`, an occupancy sensor
+`1030` OccupancySensing/`Occupancy`. Those are reported too, unconverted, along
+with `128` BooleanStateConfiguration's `AlarmsActive`, `AlarmsSuppressed` and
+`SensorFault`. Cluster 128's sensitivity attributes are configuration rather
+than readings — ask for them with *Selected clusters* (`128/0`).
 
 Concentration clusters (CO₂, PM2.5, TVOC, …) are recognised from the device
 descriptor rather than a hardcoded id list, since their ids move between Matter

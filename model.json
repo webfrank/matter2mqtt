@@ -97,6 +97,19 @@
    "name": "BooleanState",
    "attributes": {"0": "StateValue"}
   },
+  "128": {
+   "name": "BooleanStateConfiguration",
+   "attributes": {
+    "0": "CurrentSensitivityLevel",
+    "1": "SupportedSensitivityLevels",
+    "2": "DefaultSensitivityLevel",
+    "3": "AlarmsActive",
+    "4": "AlarmsSuppressed",
+    "5": "AlarmsEnabled",
+    "6": "AlarmsSupported",
+    "7": "SensorFault"
+   }
+  },
   "257": {
    "name": "DoorLock",
    "attributes": {
@@ -195,6 +208,38 @@
     "1": "OccupancySensorType",
     "2": "OccupancySensorTypeBitmap"
    }
+  },
+  "1037": {
+   "name": "CarbonDioxideConcentrationMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "PeakMeasuredValue",
+    "4": "PeakMeasuredValueWindow",
+    "5": "AverageMeasuredValue",
+    "6": "AverageMeasuredValueWindow",
+    "7": "Uncertainty",
+    "8": "MeasurementUnit",
+    "9": "MeasurementMedium",
+    "10": "LevelValue"
+   }
+  },
+  "1066": {
+   "name": "Pm25ConcentrationMeasurement",
+   "attributes": {
+    "0": "MeasuredValue",
+    "1": "MinMeasuredValue",
+    "2": "MaxMeasuredValue",
+    "3": "PeakMeasuredValue",
+    "4": "PeakMeasuredValueWindow",
+    "5": "AverageMeasuredValue",
+    "6": "AverageMeasuredValueWindow",
+    "7": "Uncertainty",
+    "8": "MeasurementUnit",
+    "9": "MeasurementMedium",
+    "10": "LevelValue"
+   }
   }
  },
  "device_types": {
@@ -204,6 +249,8 @@
   "19": "BridgedNode",
   "21": "ContactSensor",
   "22": "RootNode",
+  "44": "AirQualitySensor",
+  "67": "WaterLeakDetector",
   "256": "OnOffLight",
   "257": "DimmableLight",
   "259": "OnOffLightSwitch",

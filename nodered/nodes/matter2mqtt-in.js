@@ -89,8 +89,8 @@ module.exports = function (RED) {
           )
         default:
           // Not merely attribute 0: Identify, Descriptor and OnOff all have
-          // one, and none of them is a measurement.
-          return scaling.isMeasuredValue(parsed.cluster, parsed.attribute, clusterHint)
+          // one, and none of them is a reading.
+          return scaling.isReading(parsed.cluster, parsed.attribute, clusterHint)
       }
     }
 
@@ -105,7 +105,7 @@ module.exports = function (RED) {
 
       if (result.value === null && onNull === 'drop') return
 
-      const measured = scaling.isMeasuredValue(parsed.cluster, parsed.attribute, clusterHint)
+      const measured = scaling.isReading(parsed.cluster, parsed.attribute, clusterHint)
       // The descriptor names clusters the conversion table does not cover, so
       // "every attribute" mode still produces readable topics.
       const clusterName = scaling.clusterName(parsed.cluster) || clusterHint

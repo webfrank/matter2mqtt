@@ -1,6 +1,6 @@
 {
   "name": "@webfrank/node-red-contrib-matter2mqtt",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Node-RED nodes for the matter2mqtt bridge: discover Matter devices by NodeLabel and receive MeasuredValue readings converted to engineering units.",
   "keywords": [
     "node-red",
