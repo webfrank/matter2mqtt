@@ -15,7 +15,13 @@
  *   1028 Flow          MeasuredValue = 10 x m3/h
  *   1029 Humidity      MeasuredValue = 100 x percent
  *
- * Clusters absent from this table are passed through untouched, which is the
+ * A few attributes outside the measurement clusters carry their own fixed
+ * encoding, keyed by cluster/attribute in ATTRIBUTE_SCALES:
+ *
+ *   47/11 PowerSource BatVoltage           = millivolts
+ *   47/12 PowerSource BatPercentRemaining  = 2 x percent (0-200)
+ *
+ * Clusters absent from these tables are passed through untouched, which is the
  * right default: the concentration clusters (CO2, PM2.5, ...) already report a
  * float in their own unit, and an unknown cluster must not be silently mangled.
  */
@@ -46,6 +52,20 @@ const CLUSTERS = {
   1027: { name: 'PressureMeasurement', unit: 'kPa', factor: 10, precision: 1 },
   1028: { name: 'FlowMeasurement', unit: 'm³/h', factor: 10, precision: 1 },
   1029: { name: 'RelativeHumidityMeasurement', unit: '%', factor: 100, precision: 2 },
+}
+
+// Not on CLUSTERS: these clusters have no MeasuredValue, and listing them
+// there would make attribute 0 (PowerSource.Status) look like one.
+const ATTRIBUTE_SCALES = {
+  '47/11': { unit: 'V', factor: 1000, precision: 3 },
+  '47/12': { unit: '%', factor: 2, precision: 1 },
+}
+
+// conversion returns the encoding for one attribute, or undefined.
+function conversion (cluster, attribute) {
+  const attr = ATTRIBUTE_SCALES[`${cluster}/${attribute}`]
+  if (attr) return attr
+  return SCALED_ATTRIBUTES.has(attribute) ? CLUSTERS[cluster] : undefined
 }
 
 /**
@@ -129,16 +149,14 @@ function isMeasuredValue (cluster, attribute, clusterNameHint) {
  * value that is not a number (a struct, a list) is passed through as-is.
  */
 function scale (cluster, attribute, raw, opts = {}) {
-  const def = CLUSTERS[cluster]
-  const unit = def ? def.unit : ''
+  const def = conversion(cluster, attribute)
+  const unit = (def || CLUSTERS[cluster] || {}).unit || ''
 
   if (raw === null || raw === undefined) return { value: null, unit, scaled: false }
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
     return { value: raw, unit, scaled: false }
   }
-  if (!def || !SCALED_ATTRIBUTES.has(attribute)) {
-    return { value: raw, unit, scaled: false }
-  }
+  if (!def) return { value: raw, unit, scaled: false }
 
   const value = def.decode ? def.decode(raw) : raw / def.factor
   if (value === null) return { value: null, unit, scaled: true }
@@ -159,12 +177,12 @@ function scale (cluster, attribute, raw, opts = {}) {
  * for test rigs that write MeasuredValue directly.
  */
 function unscale (cluster, attribute, value) {
-  const def = CLUSTERS[cluster]
+  const def = conversion(cluster, attribute)
   if (value === null || value === undefined) return { value: null, scaled: false }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return { value, scaled: false }
   }
-  if (!def || !SCALED_ATTRIBUTES.has(attribute)) return { value, scaled: false }
+  if (!def) return { value, scaled: false }
 
   if (def.encode) return { value: def.encode(value), scaled: true }
   return { value: Math.round(value * def.factor), scaled: true }
@@ -194,6 +212,7 @@ function round (v, digits) {
 module.exports = {
   CLUSTERS,
   STATE_CLUSTERS,
+  ATTRIBUTE_SCALES,
   SCALED_ATTRIBUTES,
   scale,
   unscale,

@@ -132,3 +132,13 @@ test('state clusters are readings, unconverted', () => {
   assert.ok(!isReading(128, 0))
   assert.strictEqual(attributeName(128, 3), 'AlarmsActive')
 })
+
+test('PowerSource battery attributes convert to volts and percent', () => {
+  assert.deepStrictEqual(scale(47, 11, 3012), { value: 3.012, unit: 'V', scaled: true })
+  assert.deepStrictEqual(scale(47, 12, 171), { value: 85.5, unit: '%', scaled: true })
+  assert.deepStrictEqual(scale(47, 12, null), { value: null, unit: '%', scaled: false })
+  assert.deepStrictEqual(unscale(47, 12, 85.5), { value: 171, scaled: true })
+  // Attribute 0 is Status, not a MeasuredValue.
+  assert.deepStrictEqual(scale(47, 0, 1), { value: 1, unit: '', scaled: false })
+  assert.ok(!isMeasuredValue(47, 0))
+})
